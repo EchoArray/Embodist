@@ -7,9 +7,17 @@ public class Globals : MonoBehaviour
 {
     #region Values
     public static Globals Instance;
-
+    /// <summary>
+    /// Defines the layer in-which each inanimate object is set.
+    /// </summary>
     public const int INANIMATE_OBJECT_LAYER = 8;
+    /// <summary>
+    /// Defines the layer in-which each structure object is set.
+    /// </summary>
     public const int STRUCTURE_LAYER = 12;
+    /// <summary>
+    /// Defines the layer in-which each scenery object is set.
+    /// </summary>
     public const int SCENERY_LAYER = 13;
 
 
@@ -46,8 +54,14 @@ public class Globals : MonoBehaviour
         }
         public GenericColors Colors;
 
+        /// <summary>
+        /// Defines the camera effect applied to a players camera upon being damaged.
+        /// </summary>
         public CameraEffect TakeDamageCameraEffect;
 
+        /// <summary>
+        /// Defines the grounding and jumping angle bias for an inanimate object.
+        /// </summary>
         public float AngleBias = 43f;
 
         /// <summary>
@@ -122,6 +136,9 @@ public class Globals : MonoBehaviour
             [Serializable]
             public class GlobalLungeValues
             {
+                /// <summary>
+                /// Defines the minimum distance in-which the camera will correct its rotation upon lunging.
+                /// </summary>
                 public float MinCameraCorrectionLungeDistance;
 
                 /// <summary>
@@ -207,13 +224,37 @@ public class Globals : MonoBehaviour
     [Serializable]
     public class GlobalContainers
     {
+        /// <summary>
+        /// Defines the container for all camera objects.
+        /// </summary>
         public Transform Cameras;
+        /// <summary>
+        /// Defines the container for all player objects.
+        /// </summary>
         public Transform Players;
+        /// <summary>
+        /// Defines the container for all projectile objects.
+        /// </summary>
         public Transform Projectiles;
-        public Transform Objects;
+        /// <summary>
+        /// Defines the container for all inanimate objects.
+        /// </summary>
+        public Transform InanimateObjects;
+        /// <summary>
+        /// Defines the container for all area isolator objects.
+        /// </summary>
         public Transform AreaIsolators;
+        /// <summary>
+        /// Defines the container for all ui objects.
+        /// </summary>
         public Transform UI;
+        /// <summary>
+        /// Defines the container for all objective objects.
+        /// </summary>
         public Transform Objectives;
+        /// <summary>
+        /// Defines the container for all effect objects.
+        /// </summary>
         public Transform Effects;
     }
     [Space(15)]

@@ -185,7 +185,6 @@ public class CameraController : MonoBehaviour
     private void Awake()
     {
         Initialize();
-        SetAutoAttachDuration();
     }
 
     private void Update()
@@ -229,6 +228,7 @@ public class CameraController : MonoBehaviour
         _isolatorMaterialStartingColor = _isolatorMaterialInstance.GetColor("_TintColor");
 
         SetAttributes(false);
+        SetAutoAttachDuration();
     }
 
     /// <summary>
@@ -540,8 +540,8 @@ public class CameraController : MonoBehaviour
 
         while (true)
         {
-            objectIndex = Random.Range(0, Globals.Instance.Containers.Objects.childCount - 1);
-            inanimateObject = Globals.Instance.Containers.Objects.GetChild(objectIndex).gameObject.GetComponent<InanimateObject>();
+            objectIndex = Random.Range(0, Globals.Instance.Containers.InanimateObjects.childCount - 1);
+            inanimateObject = Globals.Instance.Containers.InanimateObjects.GetChild(objectIndex).gameObject.GetComponent<InanimateObject>();
             if (!inanimateObject.Controlled && IsClassEnabled(inanimateObject.Class))
             {
                 // Cast a ray to make sure the prospect selection isnt in an isolated area
@@ -602,9 +602,9 @@ public class CameraController : MonoBehaviour
             relativeRadiusPoints[i] = screenCenter + radiusPoints[i] * targetingRadius;
 
         // Loop through each inanimate object to get its targeting boxes
-        for (int j = 0; j < Globals.Instance.Containers.Objects.childCount; j++)
+        for (int j = 0; j < Globals.Instance.Containers.InanimateObjects.childCount; j++)
         {
-            InanimateObject inanimateObject = Globals.Instance.Containers.Objects.GetChild(j).gameObject.GetComponent<InanimateObject>();
+            InanimateObject inanimateObject = Globals.Instance.Containers.InanimateObjects.GetChild(j).gameObject.GetComponent<InanimateObject>();
 
             foreach (InanimateObject.TargetingBox targetingBox in inanimateObject.TargetingBoxes)
             {

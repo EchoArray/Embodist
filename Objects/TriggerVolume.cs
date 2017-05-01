@@ -7,7 +7,6 @@ using System;
 public class TriggerVolume : MonoBehaviour
 {
     #region Values
-    public string AreaName;
     /// <summary>
     /// Determines which layers the volume will ignore.
     /// </summary>
@@ -39,21 +38,39 @@ public class TriggerVolume : MonoBehaviour
     [Serializable]
     public class TriggerEvent
     {
+        /// <summary>
+        /// Defines the condition in-which the event is called.
+        /// </summary>
         public TriggerOn Condition;
+        /// <summary>
+        /// Defines the Action upon triggering.
+        /// </summary>
         public TriggerAction Action;
+        /// <summary>
+        /// Defines the physical effect applied to the intersecting objects.
+        /// </summary>
         public GameObject PhysicalEffect;
+        /// <summary>
+        /// Defines the seconday trigger volume in-which an interseting object will be sent to.
+        /// </summary>
         public TriggerVolume TeleportationDestination;
+
         [Serializable]
         public class Target
         {
+            /// <summary>
+            /// Defines the object in-which the method will be invoked upon.
+            /// </summary>
             public GameObject GameObject;
+            /// <summary>
+            /// Defines the name of the method to be invoked.
+            /// </summary>
             public string MethodCalled;
         }
         public Target[] Targets;
     }
-
+    // A collection of the box collider components of this game object.
     private Collider[] _boxColliders;
-    private BoxCollider _boxCollider;
     #endregion
 
     #region Unity Functions
@@ -166,28 +183,16 @@ public class TriggerVolume : MonoBehaviour
     }
 
     private void ProcessTriggers(GameObject gameObject, TriggerOn condition)
-
     {
-        // For each trigger event that is an exit or enter, apply appropriately.
         foreach (TriggerEvent triggerEvent in Events)
+        {
             if (triggerEvent.Condition == condition)
             {
-                InanimateObject inanimateObject = null;
-                if (AreaName != string.Empty)
-                {
-                    if (inanimateObject == null)
-                        inanimateObject = gameObject.GetComponent<InanimateObject>();
-
-                    if (inanimateObject != null && inanimateObject.LocalPlayer != null)
-                        inanimateObject.LocalPlayer.AreaName = AreaName;
-                }
-
-                
+                // Apply default actions
                 switch (triggerEvent.Action)
                 {
                     case TriggerAction.Kill:
-                        if(inanimateObject == null)
-                            inanimateObject = gameObject.GetComponent<InanimateObject>();
+                        InanimateObject inanimateObject = null;
                         if (inanimateObject != null)
                             inanimateObject.Kill(true);
                         break;
@@ -195,26 +200,49 @@ public class TriggerVolume : MonoBehaviour
                         Destroy(gameObject);
                         break;
                     case TriggerAction.Teleport:
-                        Vector3 offset = gameObject.transform.position - this.transform.position;
-                        gameObject.transform.position = triggerEvent.TeleportationDestination.transform.position + offset;
-                        triggerEvent.TeleportationDestination.TeleportationEnterIgnore = gameObject;
-
+                        TeleportGameObject(gameObject, triggerEvent.TeleportationDestination);
                         break;
 
                 }
+
+                // Apply physical effect
                 if (triggerEvent.PhysicalEffect != null)
                 {
                     PhysicalEffect physicalEffect = triggerEvent.PhysicalEffect.GetComponent<PhysicalEffect>();
                     if (physicalEffect != null)
                         physicalEffect.Affect(gameObject, this.transform, false);
                 }
+
+                // Method calls
                 if (triggerEvent.Targets.Length > 0)
+                {
                     foreach (TriggerEvent.Target target in triggerEvent.Targets)
+                    {
                         if (target.MethodCalled != string.Empty)
                             target.GameObject.SendMessage(target.MethodCalled, gameObject, SendMessageOptions.DontRequireReceiver);
+                    }
+                }
             }
+        }
     }
 
+    /// <summary>
+    /// Teleports a game object to another volume.
+    /// </summary>
+    /// <param name="gameObject"></param>
+    /// <param name="destinationVolume"></param>
+    public void TeleportGameObject(GameObject gameObject, TriggerVolume destinationVolume)
+    {
+        Vector3 offset = gameObject.transform.position - this.transform.position;
+        gameObject.transform.position = destinationVolume.transform.position + offset;
+        destinationVolume.TeleportationEnterIgnore = gameObject;
+    }
+
+    /// <summary>
+    /// Determines if a vector3 point is within the bounds of any trigger box collider attached to this volume.
+    /// </summary>
+    /// <param name="point"></param>
+    /// <returns></returns>
     public bool BoxContainsPoint(Vector3 point)
     {
         foreach (BoxCollider boxCollider in _boxColliders)
@@ -234,6 +262,5 @@ public class TriggerVolume : MonoBehaviour
         }
         return false;
     }
-
     #endregion
 }
