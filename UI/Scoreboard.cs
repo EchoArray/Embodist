@@ -14,7 +14,15 @@ public class Scoreboard : MonoBehaviour
     /// Defines the margin between each stat.
     /// </summary>
     public float StatMargin;
+    /// <summary>
+    /// Defines the offset in-which elements will start at.
+    /// </summary>
+    public float StartingOffset;
 
+    /// <summary>
+    /// Determines if the container will be scaled to the space of its elements.
+    /// </summary>
+    public bool ScaleContainer = true;
     // A collection of stats
     private List<MenuStat> _stats = new List<MenuStat>();
     // The rect transform of this object
@@ -98,7 +106,7 @@ public class Scoreboard : MonoBehaviour
 
         float teamStatHeight = TeamStatPrefab.GetComponent<RectTransform>().sizeDelta.y + StatMargin;
         float playerStatHeight = PlayerStatPrefab.GetComponent<RectTransform>().sizeDelta.y + StatMargin;
-        float offset = 0;
+        float offset = StartingOffset;
 
         if (GameManager.Instance.Game.GameType.TeamGame)
         {
@@ -159,7 +167,8 @@ public class Scoreboard : MonoBehaviour
                 }
             }
         }
-        _rectTransform.sizeDelta = new Vector2(_rectTransform.sizeDelta.x, Mathf.Abs(offset));
+        if(ScaleContainer)
+            _rectTransform.sizeDelta = new Vector2(_rectTransform.sizeDelta.x, Mathf.Abs(offset));
     }
 
     public void SetActive(bool state)

@@ -62,12 +62,12 @@ public class LocalPlayer : MonoBehaviour
     {
         bool allowInput = !AwaitingRespawn && GameManager.Instance.Game.AllowInput && GameManager.Instance.Game.Playing;
 
-        Vector2 leftStick = GamePadManager.GetDirection(Profile.ControllerId, GamePadManager.Direction.LeftStick);
+        Vector2 leftStick = XboxInputManager.GetDirection(Profile.ControllerId, XboxInputManager.Direction.LeftStick);
         if (!allowInput || leftStick.magnitude < 0.05f)
             leftStick = Vector2.zero;
 
         // Move and orbit camera controller
-        Vector2 rightStick = GamePadManager.GetDirection(Profile.ControllerId, GamePadManager.Direction.RightStick);
+        Vector2 rightStick = XboxInputManager.GetDirection(Profile.ControllerId, XboxInputManager.Direction.RightStick);
         if (!allowInput || rightStick.magnitude < 0.05f)
             rightStick = Vector2.zero;
 
@@ -76,18 +76,22 @@ public class LocalPlayer : MonoBehaviour
 
         if (InanimateObject == null)
         {
-            bool boosting = 0.1f < GamePadManager.GetTriggerRaw(Profile.ControllerId, GamePadManager.Trigger.Left);
+            bool boosting = 0.1f < XboxInputManager.GetTriggerRaw(Profile.ControllerId, XboxInputManager.Trigger.Left);
             CameraController.Move(leftStick, boosting);
             if (allowInput)
-                CameraController.ProspectSelection(GamePadManager.GetButtonDown(Profile.ControllerId, GamePadManager.Button.A));
+                CameraController.ProspectSelection(XboxInputManager.GetButtonDown(Profile.ControllerId, XboxInputManager.Button.A));
         }
         else if (allowInput)
         {
-            bool leftTrigger = GamePadManager.GetTrigger(Profile.ControllerId, GamePadManager.Trigger.Left);
-            bool rightTrigger = GamePadManager.GetTrigger(Profile.ControllerId, GamePadManager.Trigger.Right);
+            bool leftTrigger = XboxInputManager.GetTrigger(Profile.ControllerId, XboxInputManager.Trigger.Left);
+            bool rightTrigger = XboxInputManager.GetTrigger(Profile.ControllerId, XboxInputManager.Trigger.Right);
 
             if (InanimateObject.Class == InanimateObject.Classification.Throwy)
-                rightTrigger = GamePadManager.GetTriggerDown(Profile.ControllerId, GamePadManager.Trigger.Right);
+                rightTrigger = XboxInputManager.GetTriggerDown(Profile.ControllerId, XboxInputManager.Trigger.Right);
+
+
+            InanimateObject.Aim(leftTrigger);
+
 
             // Attack
             if (rightTrigger)
@@ -97,35 +101,26 @@ public class LocalPlayer : MonoBehaviour
             // Move and aim attached object
             InanimateObject.Move(leftStick);
 
-            InanimateObject.Aim(leftTrigger);
-
-
             // Set beacon
-            if (GamePadManager.GetButtonDown(Profile.ControllerId, GamePadManager.Button.RB))
+            if (XboxInputManager.GetButtonDown(Profile.ControllerId, XboxInputManager.Button.RB))
                 SetBeacon();
             // Jump
-            if (GamePadManager.GetButtonDown(Profile.ControllerId, GamePadManager.Button.LB) || GamePadManager.GetButtonDown(Profile.ControllerId, GamePadManager.Button.A))
+            if (XboxInputManager.GetButtonDown(Profile.ControllerId, XboxInputManager.Button.LB) || XboxInputManager.GetButtonDown(Profile.ControllerId, XboxInputManager.Button.A))
                 InanimateObject.Jump();
         }
     }
-    public void AddVibration(GamePadManager.Vibration vibration)
+
+    public void AddVibration(XboxInputManager.Vibration vibration)
     {
         if (Profile.ControllerVibration)
-            GamePadManager.AddVibration(vibration);
+            XboxInputManager.AddVibration(vibration);
     }
 
-
-    public void ForceAttach(InanimateObject inanimateObject)
-    {
-        CameraController.SetCameraAttributes(true);
-        CameraController.UnHighlightProspect();
-        AttachTo(inanimateObject);
-    }
     public void AttachTo(InanimateObject inanimateObject)
     {
         // Set and ready attached object
         InanimateObject = inanimateObject;
-        InanimateObject.SetControlled(this);
+        InanimateObject.Select(this);
 
         if (inanimateObject.Class == InanimateObject.Classification.Bomb)
             HeadsUpDisplay.RemoveWaypoint(inanimateObject.transform);
@@ -137,36 +132,13 @@ public class LocalPlayer : MonoBehaviour
 
         HeadsUpDisplay.AddEvent(InanimateObject.Weapon == null ? "attached_has_no_weapon" : "attached_has_weapon");
     }
-
-    private void SetBeacon()
+    public void ForceAttachTo(InanimateObject inanimateObject)
     {
-        if (!GameManager.Instance.Game.GameType.TeamGame || Time.time < _beaconCooledDownTime)
-            return;
-
-        // Get beacon position
-        RaycastHit raycastHit;
-        Physics.Raycast(CameraController.transform.position, CameraController.transform.forward, out raycastHit, Mathf.Infinity, ~HUDManager.Instance.BeaconSetIgnoredLayers);
-
-        if (raycastHit.point == Vector3.zero)
-            return;
-
-        _beaconCooledDownTime = Time.time + HUDManager.Instance.BeaconCooldownDuration;
-
-        // Instantiate beacon
-        GameObject beaconGameObject = Instantiate(HUDManager.Instance.BeaconPrefab, raycastHit.point, Quaternion.identity, Globals.Instance.Containers.UI);
-        HeadsUpDisplayBeaconNode beacon = beaconGameObject.GetComponent<HeadsUpDisplayBeaconNode>();
-        beacon.Cast(Profile.TeamId);
-
-        // Create network beacon
-        if (!NetworkSessionManager.IsLocal)
-            NetworkSessionNode.Instance.CmdSpawnBeacon(Profile.TeamId, raycastHit.point);
-
+        CameraController.SetAttributes(true);
+        CameraController.UnHighlightProspect();
+        AttachTo(inanimateObject);
     }
-    
-    public void AttachedCapturedTerritory(string name)
-    {
-        HeadsUpDisplay.AddEvent("attached_captured_territory");
-    }
+
     public void AttachedDamagedEnemy()
     {
         HeadsUpDisplay.AddEvent("attached_damaged_enemy");
@@ -180,23 +152,25 @@ public class LocalPlayer : MonoBehaviour
     }
     public void AttachedDamaged(Vector3 damagePosition, bool showDirection)
     {
-        if(showDirection)
+        if (showDirection)
             HeadsUpDisplay.AddPointer(HeadsUpDisplay.Pointer.Type.Damage, damagePosition);
         HeadsUpDisplay.AddEvent("attached_damaged");
+
+        CameraController.CameraEffector.AddEffect(Globals.Instance.InanimateDefaults.TakeDamageCameraEffect);
     }
-    public void AttachedDied(bool countDeath, int casterGamerId)
+    public void AttachedDied(bool countDeath, int killerGamerId)
     {
         AreaName = string.Empty;
-        _lastKillerGamerId = casterGamerId;
+        _lastKillerGamerId = killerGamerId;
         InanimateObject = null;
 
         HeadsUpDisplay.ClearWaypointsOfType(HeadsUpDisplay.Waypoint.WaypointType.Enemy);
         if (countDeath)
             GameManager.Instance.AddProfileDeath(Profile.GamerId);
 
-        if (casterGamerId != Profile.GamerId)
+        if (killerGamerId != Profile.GamerId)
         {
-            GameManager.Instance.AddProfileKill(casterGamerId);
+            GameManager.Instance.AddProfileKill(killerGamerId);
             ShowEmojiMenu();
         }
 
@@ -206,6 +180,12 @@ public class LocalPlayer : MonoBehaviour
         HeadsUpDisplay.RemoveAllPointers();
         HeadsUpDisplay.AddEvent("player_unattached");
         HeadsUpDisplay.RemoveEvent("attached_damaged_enemy");
+        CameraController.CameraEffector.ClearAllEffects();
+    }
+
+    public void AttachedCapturedTerritory(string name)
+    {
+        HeadsUpDisplay.AddEvent("attached_captured_territory");
     }
 
 
@@ -222,8 +202,7 @@ public class LocalPlayer : MonoBehaviour
 
         MultiplayerManager.Instance.EmojiMenuControlGroup.Show(Profile, true);
     }
-
-    public void ReceiveEmoji(byte type, string fromName)
+    public void ShowEmoji(byte type, string fromName)
     {
         HeadsUpDisplay.AddEmoji(type, fromName);
     }
@@ -253,6 +232,31 @@ public class LocalPlayer : MonoBehaviour
         NetworkSessionNode.Instance.CmdSendEmoji(_lastKillerGamerId, Profile.Name, 4);
     }
 
+    private void SetBeacon()
+    {
+        if (!GameManager.Instance.Game.GameType.TeamGame || Time.time < _beaconCooledDownTime)
+            return;
+
+        // Get beacon position
+        RaycastHit raycastHit;
+        Physics.Raycast(CameraController.transform.position, CameraController.transform.forward, out raycastHit, Mathf.Infinity, ~HUDManager.Instance.BeaconSetIgnoredLayers);
+
+        if (raycastHit.point == Vector3.zero)
+            return;
+
+        _beaconCooledDownTime = Time.time + HUDManager.Instance.BeaconCooldownDuration;
+
+        // Instantiate beacon
+        GameObject beaconGameObject = Instantiate(HUDManager.Instance.BeaconPrefab, raycastHit.point, Quaternion.identity, Globals.Instance.Containers.UI);
+        HeadsUpDisplayBeaconNode beacon = beaconGameObject.GetComponent<HeadsUpDisplayBeaconNode>();
+        beacon.Cast(Profile.TeamId);
+
+        // Create network beacon
+        if (!NetworkSessionManager.IsLocal)
+            NetworkSessionNode.Instance.CmdSpawnBeacon(Profile.TeamId, raycastHit.point);
+
+    }
+
 
     /// <summary>
     /// Instantly positions the camera to a respawn location.
@@ -262,9 +266,9 @@ public class LocalPlayer : MonoBehaviour
     {
         if (InanimateObject != null)
             InanimateObject.Kill(true);
-        CameraController.SetCameraAttributes(false);
+        CameraController.SetAttributes(false);
         SpawnManager.Instance.RespawnLocalCamera(this);
-        GamePadManager.ClearControllerVibrations(Profile.ControllerId);
+        XboxInputManager.ClearControllerVibrations(Profile.ControllerId);
         AwaitingRespawn = false;
     }
     /// <summary>

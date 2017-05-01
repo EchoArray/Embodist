@@ -1,7 +1,6 @@
-﻿using UnityEngine;
-using System.Collections;
+﻿using System;
+using UnityEngine;
 using UnityEngine.Networking;
-using System;
 
 public class InanimateObject :  NetworkBehaviour
 {
@@ -35,12 +34,6 @@ public class InanimateObject :  NetworkBehaviour
     public Color SelectionColor;
 
     /// <summary>
-    /// Defines the name of the inanimate objects.
-    /// </summary>
-    public string Name;
-
-
-    /// <summary>
     /// Defines the offset per axis in-which the waypoint will rest from the inanimate objects position.
     /// </summary>
     public Vector3 WaypointOffset;
@@ -61,8 +54,17 @@ public class InanimateObject :  NetworkBehaviour
     [Serializable]
     public class TargetingBox
     {
+        /// <summary>
+        /// Defines the center position of the targeting box.
+        /// </summary>
         public Vector3 Center;
+        /// <summary>
+        /// Defines the size of the targeting box.
+        /// </summary>
         public Vector3 Size;
+        /// <summary>
+        /// Defines the rotation of the targeting box.
+        /// </summary>
         public Vector3 Rotation;
     }
     [Space(15)]
@@ -116,8 +118,6 @@ public class InanimateObject :  NetworkBehaviour
     [Serializable]
     public class MovementSettings
     {
-
-
         /// <summary>
         /// Determines if the inanimate object is grounded or not.
         /// </summary>
@@ -146,7 +146,10 @@ public class InanimateObject :  NetworkBehaviour
         /// Defines fixed update time for the most recent time that grounded was set to true.
         /// </summary>
         [HideInInspector]
-        public float LastStayGroundSetTime;
+        public float LastGroundTime;
+        /// <summary>
+        /// Defines the last time that the inanimate object jumped.
+        /// </summary>
         [HideInInspector]
         public float JumpedTime;
 
@@ -191,6 +194,9 @@ public class InanimateObject :  NetworkBehaviour
         /// </summary>
         [HideInInspector]
         public bool AllowLungeRotationCorrection;
+        /// <summary>
+        /// Defines the position in-which the local players camera controller was lookin up initially lunging.
+        /// </summary>
         [HideInInspector]
         public Vector3 LungeLookingPosition;
 
@@ -234,9 +240,14 @@ public class InanimateObject :  NetworkBehaviour
     [ValueReference("targeting_state")]
     public TargetingType TargetingState;
 
-
+    /// <summary>
+    /// Defines the light map color of the inanimate object.
+    /// </summary>
     public Color LightmapColor;
 
+    /// <summary>
+    /// Defines the network transform component of the game object.
+    /// </summary>
     [HideInInspector]
     public NetworkTransform NetworkTransform;
 
@@ -253,7 +264,6 @@ public class InanimateObject :  NetworkBehaviour
     {
         Initialize();
     }
-
     private void Start()
     {
         if (Class == Classification.Bomb)
@@ -266,6 +276,7 @@ public class InanimateObject :  NetworkBehaviour
         if (Controlled && (hasAuthority || NetworkSessionManager.IsLocal))
         {
             UpdateAiming();
+            UpdateCameraOffset();
             UpdateLunge();
             UpdateLastDamageCaster();
             UpdateHealthRegeneration();
@@ -283,9 +294,12 @@ public class InanimateObject :  NetworkBehaviour
     }
     private void OnCollisionExit(Collision collision)
     {
-        if (!Controlled)
-            return;
         SetGrounding(false);
+    }
+    
+    private void OnDestroy()
+    {
+        Destroy(_material);
     }
 
     private void OnDrawGizmos()
@@ -328,11 +342,6 @@ public class InanimateObject :  NetworkBehaviour
 
         Gizmos.matrix = matrixBackup;
     }
-
-    private void OnDestroy()
-    {
-        Destroy(_material);
-    }
     #endregion
 
     #region Functions
@@ -354,7 +363,68 @@ public class InanimateObject :  NetworkBehaviour
         
         SetProspectColor();
     }
-    private void SetDefaults()
+    
+    #region Selection
+    private void SetProspectColor()
+    {
+        Color selectionColor = SelectionColor;
+        switch (Class)
+        {
+            case Classification.Throwy:
+                selectionColor = Globals.Instance.InanimateDefaults.Colors.ThrowySelectionColor;
+                break;
+            case Classification.Squirty:
+                selectionColor = Globals.Instance.InanimateDefaults.Colors.SquirtySelectionColor;
+                break;
+            case Classification.Smashy:
+                selectionColor = Globals.Instance.InanimateDefaults.Colors.SmashySelectionColor;
+                break;
+        }
+        _material.SetColor("_SelectionColor", selectionColor);
+    }
+    /// <summary>
+    /// Sets the state of show selection color, in the inanimate objects material.
+    /// </summary>
+    /// <param name="show"> Determines the state of show selection color.</param>
+    public void ToggleProspectColor(bool show)
+    {
+        _material.SetFloat("_ShowSelectionColor", show ? 1 : 0);
+    }
+
+    public void Select(LocalPlayer localPlayer)
+    {
+        LocalPlayer = localPlayer;
+
+        GamerId = localPlayer.Profile.GamerId;
+        TeamId = localPlayer.Profile.TeamId;
+
+        Controlled = true;
+
+        AlertSelected();
+        SetAttributes();
+
+        if (Weapon != null)
+            Weapon.SetDefaults(GamerId);
+    }
+    public void AlertSelected()
+    {
+        if (NetworkSessionManager.IsLocal)
+            HUDManager.Instance.PopulateWaypointsOnControl(GamerId);
+    }
+    [ClientRpc]
+    public void RpcSelected(int gamerId, int teamId)
+    {
+        GamerId = gamerId;
+        TeamId = teamId;
+        Controlled = true;
+
+        NetworkTransform.sendInterval = 0.03243f;
+        NetworkTransform.interpolateMovement = 1;
+
+        HUDManager.Instance.PopulateWaypointsOnControl(gamerId);
+    }
+
+    private void SetAttributes()
     {
         switch (Class)
         {
@@ -384,33 +454,7 @@ public class InanimateObject :  NetworkBehaviour
 
         Health = MaxHealth;
     }
-
-
-    private void SetProspectColor()
-    {
-        Color selectionColor = SelectionColor;
-        switch (Class)
-        {
-            case Classification.Throwy:
-                selectionColor = Globals.Instance.InanimateDefaults.Colors.ThrowySelectionColor;
-                break;
-            case Classification.Squirty:
-                selectionColor = Globals.Instance.InanimateDefaults.Colors.SquirtySelectionColor;
-                break;
-            case Classification.Smashy:
-                selectionColor = Globals.Instance.InanimateDefaults.Colors.SmashySelectionColor;
-                break;
-        }
-        _material.SetColor("_SelectionColor", selectionColor);
-    }
-    /// <summary>
-    /// Sets the state of show selection color, in the inanimate objects material.
-    /// </summary>
-    /// <param name="show"> Determines the state of show selection color.</param>
-    public void ToggleProspectColor(bool show)
-    {
-        _material.SetFloat("_ShowSelectionColor", show ? 1 : 0);
-    }
+    #endregion
 
     public void UpdateMaterialLighting(bool velocityBias = false)
     {
@@ -423,72 +467,56 @@ public class InanimateObject :  NetworkBehaviour
         _material.SetColor("_LightmapColor", LightmapColor);
     }
 
-
-    public void SetControlled(LocalPlayer localPlayer)
+    private void UpdateCameraOffset()
     {
-        LocalPlayer = localPlayer;
+        // Updates the position and rotation of the local players camera controller.
 
-        GamerId = localPlayer.Profile.GamerId;
-        TeamId = localPlayer.Profile.TeamId;
+        if (Class != Classification.Throwy)
+            return;
 
-        Controlled = true;
+        if (Movement.Lunging)
+        {
+            if (Movement.AllowLungeRotationCorrection && CameraFollowOffset.x != 0 && CameraFollowOffset.y != 0)
+                LocalPlayer.CameraController.transform.LookAt(Movement.LungeLookingPosition);
 
-        AlertControlled();
-        SetDefaults();
-
-        if (Weapon != null)
-            Weapon.IdentifyOwner(GamerId, this);
-    }
-    public void AlertControlled()
-    {
-        if (NetworkSessionManager.IsLocal)
-            HUDManager.Instance.PopulateWaypointsOnControl(GamerId);
-    }
-    [ClientRpc]
-    public void RpcSetControlled(int gamerId, int teamId)
-    {
-        GamerId = gamerId;
-        TeamId = teamId;
-        Controlled = true;
-
-        NetworkTransform.sendInterval = 0.03243f;
-        NetworkTransform.interpolateMovement = 1;
-        HUDManager.Instance.PopulateWaypointsOnControl(gamerId);
+            // Update camera offset and set velocity
+            Vector3 cameraFollowOffsetStored = CameraFollowOffset;
+            CameraFollowOffset = Vector3.MoveTowards(CameraFollowOffset, new Vector3(0, 0, _defaultCameraFollowOffset.z), Globals.Instance.InanimateDefaults.Light.Lunge.FollowOffsetCorrectionRate * Time.deltaTime);
+        }
+        else
+        {
+            CameraFollowOffset = Vector3.MoveTowards(CameraFollowOffset, _defaultCameraFollowOffset, Globals.Instance.InanimateDefaults.Light.Lunge.FollowOffsetCorrectionRate * Time.deltaTime);
+        }
     }
 
-
+    #region Player Movement
     /// <summary>
     /// Moves the inanimate object along the input direction.
     /// </summary>
     /// <param name="input"> Defines the direction that the inanimate object is to move along.</param>
     public void Move(Vector2 input)
     {
-        if (input.magnitude == 0)
-            return;
-        if (Movement.Lunging)
+        if (input.magnitude == 0 || Movement.Lunging)
             return;
 
-        // Defines directions
-        Vector3 camerFacing = LocalPlayer.CameraController.transform.forward;
+        // Define directions
         Vector3 forward = Quaternion.Euler(0, LocalPlayer.CameraController.transform.rotation.eulerAngles.y, 0) * Vector3.forward;
-        Vector3 right =  LocalPlayer.CameraController.transform.right;
+        Vector3 right = LocalPlayer.CameraController.transform.right;
 
         // Determine movement speed, scale velocity by input, apply force.
         float movementSpeed = Movement.Grounded ? Movement.GroundedMovementSpeed : Movement.AirborneMovementSpeed;
         
-
         Vector3 velocity = ((forward * input.y) + (right * input.x)) * movementSpeed;
         
-
         _rigidbody.AddForce(velocity - _rigidbody.velocity, ForceMode.Force);
 
         if (!_aiming)
         {
-
             // Defines the angular velocity mod based on if the heavy inanimate object is stuck.
             float angularVelocityMod = 1;
-            bool possiblyStuck = _rigidbody.angularVelocity.magnitude < Globals.Instance.InanimateDefaults.Heavy.StuckVelocityMin;
-            if (Class == Classification.Smashy && Movement.Grounded && possiblyStuck)
+
+            bool stuck = _rigidbody.angularVelocity.magnitude < Globals.Instance.InanimateDefaults.Heavy.StuckVelocityMin;
+            if (stuck && Class == Classification.Smashy && Movement.Grounded)
                 angularVelocityMod = Globals.Instance.InanimateDefaults.Heavy.StuckAngularVelocityIncrease;
 
             float angularVelocityScale = Movement.Grounded ? Movement.GroundedAngularVelocityScale : Movement.AirborneAngularVelocityScale;
@@ -497,14 +525,43 @@ public class InanimateObject :  NetworkBehaviour
             _rigidbody.angularVelocity += angularVelocity;
         }
     }
+    /// <summary>
+    /// Instantaneously sets the y-axis' velocity of the inanimate object to that of the jump velocity.
+    /// </summary>
+    public void Jump()
+    {
+
+        if (Movement.Lunging)
+            return;
+
+        if (!Movement.Grounded)
+        {
+            Movement.JumpAttemptExpiration = Time.timeSinceLevelLoad + Globals.Instance.InanimateDefaults.PreGroundedJumpWindow;
+
+            bool withinJumpWindow = Movement.UngroundedJumpWindowExpiration > Time.timeSinceLevelLoad;
+            if ((!withinJumpWindow || Movement.Jumped) && _rigidbody.velocity.magnitude > 0.01f)
+                return;
+        }
+        Movement.JumpedTime = Time.timeSinceLevelLoad;
+        // Add jump velocity, set grounding
+        _rigidbody.velocity = new Vector3(_rigidbody.velocity.x, Movement.JumpVelocity, _rigidbody.velocity.z);
+        Movement.Grounded = false;
+        Movement.JumpAttemptExpiration = -1;
+        Movement.Jumped = true;
+        Movement.UngroundedJumpWindowExpiration = -1;
+    } 
+    #endregion
+
+    /// <summary>
+    /// Resets the velocity and angular velocity of the inanaimate objects rigid body.
+    /// </summary>
     public void ResetVelocity()
     {
         _rigidbody.velocity = Vector3.zero;
         _rigidbody.angularVelocity = Vector3.zero;
-        UpdateMaterialLighting();
     }
 
-
+    #region Aiming and Targeting
     private void UpdateAiming()
     {
         RaycastHit raycastHit;
@@ -512,8 +569,7 @@ public class InanimateObject :  NetworkBehaviour
         // Casts rays to determine the aiming position and rotates the inanimate object to face toward the aiming position.
         if (_aiming)
         {
-
-            Vector3 direction = hit ? (raycastHit.point - Weapon.transform.position).normalized :
+            Vector3 direction = hit && raycastHit.collider != null ? (raycastHit.point - Weapon.transform.position).normalized :
                 ((LocalPlayer.CameraController.transform.position + (LocalPlayer.CameraController.transform.forward * Globals.Instance.InanimateDefaults.TargetingDistance)) - this.transform.position).normalized;
 
             // Determine rotation scale and speed, rotate
@@ -561,7 +617,7 @@ public class InanimateObject :  NetworkBehaviour
     private void CheckTargetingState(RaycastHit raycastHit)
     {
         TargetingState = TargetingType.None;
-        LocalPlayer.CameraController.TurningScale = 1;
+        LocalPlayer.CameraController.AttachedTurningScale = 1;
 
         if (raycastHit.collider != null)
         {
@@ -579,188 +635,50 @@ public class InanimateObject :  NetworkBehaviour
                     TargetingState = TargetingType.Enemy;
 
                 if (TargetingState == TargetingType.Enemy)
-                    LocalPlayer.CameraController.TurningScale = 0.5f;
+                    LocalPlayer.CameraController.AttachedTurningScale = 0.5f;
             }
         }
     }
+    #endregion
 
-
-    /// <summary>
-    /// Instantaneously sets the y-axis' velocity of the inanimate object to that of the jump velocity.
-    /// </summary>
-    public void Jump()
-    {
-
-        if (Movement.Lunging)
-            return;
-        
-        if (!Movement.Grounded)
-        {
-            Movement.JumpAttemptExpiration = Time.timeSinceLevelLoad + Globals.Instance.InanimateDefaults.PreGroundedJumpWindow;
-
-            bool withinJumpWindow = Movement.UngroundedJumpWindowExpiration > Time.timeSinceLevelLoad;
-            if ((!withinJumpWindow || Movement.Jumped) && _rigidbody.velocity.magnitude > 0.01f)
-                return;
-        }
-        Movement.JumpedTime = Time.timeSinceLevelLoad;
-        // Add jump velocity, set grounding
-        _rigidbody.velocity = new Vector3(_rigidbody.velocity.x, Movement.JumpVelocity, _rigidbody.velocity.z);
-        Movement.Grounded = false;
-        Movement.JumpAttemptExpiration = -1;
-        Movement.Jumped = true;
-        Movement.UngroundedJumpWindowExpiration = -1;
-    }
-    private void CheckJumpAttempt()
+    #region Collision and Grounding
+    private void CheckPrelandingJumpAttempt()
     {
         // Determines upon landing; if the inanimate object has attempted to jump while airborne.
         if (Movement.Grounded && Movement.JumpAttemptExpiration >= Time.timeSinceLevelLoad)
             Jump();
     }
-    private void SetGrounding(bool ground, bool hit = false)
+    private void SetGrounding(bool ground, bool colliding = false)
     {
-        if (hit && GameManager.Instance.Game.GameType.ClimbWalls)
+        if (!Controlled)
+            return;
+
+        if (colliding && GameManager.Instance.Game.GameType.ClimbWalls)
         {
             Movement.Grounded = true;
             return;
         }
         // Determine the grounded state of the inanimate object.
-        if (!ground && !hit)
-           Movement.UngroundedJumpWindowExpiration = Time.timeSinceLevelLoad + Globals.Instance.InanimateDefaults.PostGroundedJumpWindow;
-        
+        if (!ground && !colliding)
+            Movement.UngroundedJumpWindowExpiration = Time.timeSinceLevelLoad + Globals.Instance.InanimateDefaults.PostGroundedJumpWindow;
+
         Movement.Grounded = ground;
 
         if (ground)
         {
+            Movement.LastGroundTime = Time.fixedTime;
             Movement.Jumped = false;
-            CheckJumpAttempt();
+
+            CheckPrelandingJumpAttempt();
         }
-    }
-
-    /// <summary>
-    /// Executes the inanimate objects attack.
-    /// </summary>
-    public void Attack()
-    {
-        switch (Class)
-        {
-            case Classification.Throwy:
-                Lunge();
-                break;
-            case Classification.Squirty:
-                Weapon.Fire();
-                break;
-        }
-    }
-    private void DirectAttack(InanimateObject inanimateObject)
-    {
-        if (inanimateObject == null || !inanimateObject.Controlled || _rigidbody.velocity.magnitude <= Globals.Instance.InanimateDefaults.Heavy.DamageApplicationVelocityMagnitude)
-            return;
-
-        // Directly applies damage to an inanimate object.
-        GameManager.GameAspects.Profile profile = GameManager.Instance.GetProfileByGamerId(inanimateObject.GamerId);
-        if (GameManager.Instance.Game.GameType.TeamGame && profile.TeamId == TeamId)
-            return;
-
-        Globals.Instance.InanimateDefaults.Heavy.CollideSelfPhysicalEffect.Cast(GamerId);
-
-        // TODO: Add transfer physical effect, and vibration for controlling player
-        if (profile.Local)
-            inanimateObject.Damage(Globals.Instance.InanimateDefaults.Heavy.CollidePhysicalEffect.Damage.Damage, this.transform.position, GamerId);
-        else
-            NetworkSessionNode.Instance.CmdTransferDamage(GamerId, inanimateObject.GamerId, Globals.Instance.InanimateDefaults.Heavy.CollidePhysicalEffect.Damage.Damage);
-        
-        LocalPlayer.AttachedDamagedEnemy();
-    }
-
-    private void UpdateLunge()
-    {
-        if (Class != Classification.Throwy)
-            return;
-
-        // Updates the lunging process of the inanimate object.
-        if (Controlled && !Movement.LungeNotified && Movement.NextLungeTime < Time.time)
-        {
-            Movement.LungeNotified = true;
-            LocalPlayer.HeadsUpDisplay.AddEvent("lunge_allowed");
-        }
-
-        // If the object isn't lunging, abort
-        if (Movement.Lunging)
-        {
-            if (Movement.AllowLungeRotationCorrection && CameraFollowOffset.x != 0 && CameraFollowOffset.y != 0)
-                LocalPlayer.CameraController.transform.LookAt(Movement.LungeLookingPosition);
-
-            // Update camera offset and set velocity
-            Vector3 cameraFollowOffsetStored = CameraFollowOffset;
-            CameraFollowOffset = Vector3.MoveTowards(CameraFollowOffset, new Vector3(0, 0, _defaultCameraFollowOffset.z), Globals.Instance.InanimateDefaults.Light.Lunge.FollowOffsetCorrectionRate * Time.deltaTime);
-
-            _rigidbody.velocity = LocalPlayer.CameraController.transform.forward * Globals.Instance.InanimateDefaults.Light.Lunge.Velocity;
-        }
-        else
-        {
-            CameraFollowOffset = Vector3.MoveTowards(CameraFollowOffset, _defaultCameraFollowOffset, Globals.Instance.InanimateDefaults.Light.Lunge.FollowOffsetCorrectionRate * Time.deltaTime);
-        }
-    }
-
-    private void Lunge()
-    {
-        // Starts the lunging process of the inanimate object.
-        if (Movement.Lunging || Movement.NextLungeTime > Time.time)
-            return;
-
-        RaycastHit raycastHit;
-        bool hit = Physics.Raycast(LocalPlayer.CameraController.transform.position, LocalPlayer.CameraController.transform.forward, out raycastHit,
-            Mathf.Infinity, ~Globals.Instance.InanimateDefaults.TargetingIgnoredLayers);
-
-
-        Movement.LungeLookingPosition = hit ? raycastHit.point : LocalPlayer.CameraController.transform.position + (LocalPlayer.CameraController.transform.forward * LocalPlayer.CameraController.Camera.farClipPlane);
-
-
-        float distanceToLookingPosition = Vector3.Distance(LocalPlayer.CameraController.transform.position, Movement.LungeLookingPosition);
-        Movement.AllowLungeRotationCorrection = distanceToLookingPosition > Globals.Instance.InanimateDefaults.Light.Lunge.MinCameraCorrectionLungeDistance;
-
-        Development.AddTimedSphereGizmo(Color.white, 1f, Movement.LungeLookingPosition, 5f);
-
-        Movement.Lunging = true;
-        LocalPlayer.HeadsUpDisplay.AddEvent("lunge_disallowed");
-    }
-    private void LungeImpact(Vector3 position, Vector3 surfaceNormal)
-    {
-        if (!Movement.Lunging)
-            return;
-
-        // Create effect, update lunge status, set notification state, scale velocity, reduce health
-        Movement.Lunging = false;
-        Movement.NextLungeTime = Time.time + Globals.Instance.InanimateDefaults.Light.Lunge.NextLungeDelay;
-        Movement.LungeNotified = false;
-        
-        // Reduce velocity
-        _rigidbody.velocity *= Globals.Instance.InanimateDefaults.Light.Lunge.ImpactVelocityLossFraction;
-
-        // Create impact effect
-        GameObject newEffect = Instantiate(Globals.Instance.InanimateDefaults.Light.Lunge.ImpactEffect, position, Quaternion.LookRotation(surfaceNormal), Globals.Instance.Containers.Effects);
-        EffectUtility effectUtility = newEffect.GetComponent<EffectUtility>();
-        if (effectUtility != null)
-            effectUtility.Cast(null, GamerId, false);
-
-        if (!NetworkSessionManager.IsLocal)
-            NetworkSessionNode.Instance.SpawnEffectUtility(GamerId, Globals.Instance.InanimateDefaults.Light.Lunge.ImpactEffect, position, Quaternion.LookRotation(surfaceNormal), NetworkSessionManager.IsHost);
-
-
-        // Damage(Globals.Instance.InanimateDefaults.Light.Lunge.SelfImpactPhysicalEffect.Damage, Vector3.zero, GamerId);
-        Globals.Instance.InanimateDefaults.Light.Lunge.SelfImpactPhysicalEffect.Cast(GamerId);
     }
 
     private void CheckStayCollision(ContactPoint[] contacts)
     {
-        if (!Controlled)
-            return;
-
         // If not controlled, or grounding has been set this fixed update - abort.
-        if (Time.fixedTime == Movement.LastStayGroundSetTime || Time.timeSinceLevelLoad < Movement.JumpedTime + Globals.Instance.InanimateDefaults.StayGroundingPostJumpDelay)
+        if (!Controlled || Time.fixedTime == Movement.LastGroundTime || Time.timeSinceLevelLoad < Movement.JumpedTime + Globals.Instance.InanimateDefaults.StayGroundingPostJumpDelay)
             return;
 
-        
         bool grounded = false;
         for (int contact = 0; contact < contacts.Length; contact++)
         {
@@ -787,11 +705,7 @@ public class InanimateObject :  NetworkBehaviour
                 }
             }
         }
-
         SetGrounding(grounded, true);
-
-        if(grounded)
-            Movement.LastStayGroundSetTime = Time.fixedTime;
     }
     private void CheckEnterCollision(Collision collision)
     {
@@ -807,9 +721,117 @@ public class InanimateObject :  NetworkBehaviour
             SetGrounding(contactAngle < Globals.Instance.InanimateDefaults.AngleBias, true);
 
             if (Class == Classification.Smashy)
-                DirectAttack(collision.gameObject.GetComponent<InanimateObject>());
+                SmashyAttack(collision.gameObject.GetComponent<InanimateObject>());
+        }
+    } 
+    #endregion
+    
+    #region Attacking
+    /// <summary>
+    /// Executes the inanimate objects attack.
+    /// </summary>
+    public void Attack()
+    {
+        switch (Class)
+        {
+            case Classification.Throwy:
+                Lunge();
+                break;
+            case Classification.Squirty:
+                Weapon.Fire();
+                break;
         }
     }
+    private void UpdateLunge()
+    {
+        // Updates the velocity of the inanimate object when lunging.
+
+        if (Class != Classification.Throwy)
+            return;
+
+        // Updates the lunging process of the inanimate object.
+        if (Controlled && !Movement.LungeNotified && Movement.NextLungeTime < Time.time)
+        {
+            Movement.LungeNotified = true;
+            LocalPlayer.HeadsUpDisplay.AddEvent("lunge_allowed");
+        }
+
+        // If the object isn't lunging, abort
+        if (Movement.Lunging)
+            _rigidbody.velocity = LocalPlayer.CameraController.transform.forward * Globals.Instance.InanimateDefaults.Light.Lunge.Velocity;
+    }
+    private void Lunge()
+    {
+        // Starts the lunging process of the inanimate object.
+
+        if (Movement.Lunging || Movement.NextLungeTime > Time.time)
+            return;
+
+        RaycastHit raycastHit;
+        bool hit = Physics.Raycast(LocalPlayer.CameraController.transform.position, LocalPlayer.CameraController.transform.forward, out raycastHit,
+            Mathf.Infinity, ~Globals.Instance.InanimateDefaults.TargetingIgnoredLayers);
+
+
+        Movement.LungeLookingPosition = hit ? raycastHit.point : LocalPlayer.CameraController.transform.position + (LocalPlayer.CameraController.transform.forward * LocalPlayer.CameraController.Camera.farClipPlane);
+
+
+        float distanceToLookingPosition = Vector3.Distance(LocalPlayer.CameraController.transform.position, Movement.LungeLookingPosition);
+        Movement.AllowLungeRotationCorrection = distanceToLookingPosition > Globals.Instance.InanimateDefaults.Light.Lunge.MinCameraCorrectionLungeDistance;
+
+        Development.AddTimedSphereGizmo(Color.white, 1f, Movement.LungeLookingPosition, 5f);
+
+        Movement.Lunging = true;
+        LocalPlayer.HeadsUpDisplay.AddEvent("lunge_disallowed");
+    }
+    private void LungeImpact(Vector3 position, Vector3 surfaceNormal)
+    {
+        // Handles states, health and effects upon a lunge impact.
+
+        if (!Movement.Lunging)
+            return;
+
+        // Create effect, update lunge status, set notification state, scale velocity, reduce health
+        Movement.Lunging = false;
+        Movement.NextLungeTime = Time.time + Globals.Instance.InanimateDefaults.Light.Lunge.NextLungeDelay;
+        Movement.LungeNotified = false;
+
+        // Reduce velocity
+        _rigidbody.velocity *= Globals.Instance.InanimateDefaults.Light.Lunge.ImpactVelocityLossFraction;
+
+        // Create impact effect
+        GameObject newEffect = Instantiate(Globals.Instance.InanimateDefaults.Light.Lunge.ImpactEffect, position, Quaternion.LookRotation(surfaceNormal), Globals.Instance.Containers.Effects);
+        EffectUtility effectUtility = newEffect.GetComponent<EffectUtility>();
+        if (effectUtility != null)
+            effectUtility.Cast(null, GamerId, false);
+
+        if (!NetworkSessionManager.IsLocal)
+            NetworkSessionNode.Instance.SpawnEffectUtility(GamerId, Globals.Instance.InanimateDefaults.Light.Lunge.ImpactEffect, position, Quaternion.LookRotation(surfaceNormal), NetworkSessionManager.IsHost);
+
+
+        // Damage self
+        Globals.Instance.InanimateDefaults.Light.Lunge.SelfImpactPhysicalEffect.Cast(GamerId);
+    }
+    private void SmashyAttack(InanimateObject inanimateObject)
+    {
+        if (inanimateObject == null || !inanimateObject.Controlled || _rigidbody.velocity.magnitude <= Globals.Instance.InanimateDefaults.Heavy.DamageApplicationVelocityMagnitude)
+            return;
+
+        // Directly applies damage to an inanimate object.
+        GameManager.GameAspects.Profile profile = GameManager.Instance.GetProfileByGamerId(inanimateObject.GamerId);
+        if (GameManager.Instance.Game.GameType.TeamGame && profile.TeamId == TeamId)
+            return;
+
+        Globals.Instance.InanimateDefaults.Heavy.CollideSelfPhysicalEffect.Cast(GamerId);
+
+        // TODO: Add transfer physical effect, and vibration for controlling player
+        if (profile.Local)
+            inanimateObject.Damage(Globals.Instance.InanimateDefaults.Heavy.CollidePhysicalEffect.Damage.Damage, this.transform.position, GamerId);
+        else
+            NetworkSessionNode.Instance.CmdTransferDamage(GamerId, inanimateObject.GamerId, Globals.Instance.InanimateDefaults.Heavy.CollidePhysicalEffect.Damage.Damage);
+
+        LocalPlayer.AttachedDamagedEnemy();
+    } 
+    #endregion
 
 
     /// <summary>
@@ -827,9 +849,7 @@ public class InanimateObject :  NetworkBehaviour
         }
     }
 
-
-    // Death and damage
-
+    #region Death and Damage
     /// <summary>
     /// Applies damage to the inanimate object.
     /// </summary>
@@ -863,22 +883,23 @@ public class InanimateObject :  NetworkBehaviour
         _healthRegenerationStartTime = Time.time + HealthRegenerationDelay;
 
         if (Health <= 0)
-            Die(true, casterGamerId, this.transform.position, Quaternion.LookRotation(Vector3.up));
+            Kill(true, casterGamerId, this.transform.position, Quaternion.LookRotation(Vector3.up));
     }
+
     /// <summary>
     /// Instantly kills the inanimate object.
     /// </summary>
     /// <param name="countDeath"> Determines if the death will be counted toward the inanimate objects controlling players profile.</param>
     public void Kill(bool countDeath)
     {
-        Die(countDeath, _lastDamageCaster, this.transform.position, Quaternion.LookRotation(Vector3.up));
+        Kill(countDeath, _lastDamageCaster, this.transform.position, Quaternion.LookRotation(Vector3.up));
     }
     /// <summary>
     /// Triggers the death process of the inanimate object.
     /// </summary>
     /// <param name="player"> Determines which player is responsible for the death.</param>
     /// <param name="countDeath"> Determines if the death will be counted toward the inanimate objects controlling players profile.</param>
-    public void Die(bool countDeath = true, int casterGamerId = 0, Vector3 effectPosition = new Vector3(), Quaternion effectRotation = new Quaternion())
+    public void Kill(bool countDeath = true, int casterGamerId = 0, Vector3 effectPosition = new Vector3(), Quaternion effectRotation = new Quaternion())
     {
         if (_dead || LocalPlayer == null)
             return;
@@ -903,7 +924,7 @@ public class InanimateObject :  NetworkBehaviour
         if (NetworkSessionManager.IsClient)
             NetworkSessionNode.Instance.CmdDestroy(this.gameObject);
     }
-    public void SpawnDeathEffect(int casterGamerId = 0, Vector3 effectPosition = new Vector3(), Quaternion effectRotation = new Quaternion())
+    private void SpawnDeathEffect(int casterGamerId = 0, Vector3 effectPosition = new Vector3(), Quaternion effectRotation = new Quaternion())
     {
         // Instantiate death effect
         if (DeathEffect != null)
@@ -927,6 +948,7 @@ public class InanimateObject :  NetworkBehaviour
     {
         if (Time.time >= _healthRegenerationStartTime && !Movement.Lunging)
             Health = Mathf.Min(Health + Time.deltaTime * HealthRegenerationRate, MaxHealth);
-    }
+    } 
+    #endregion
     #endregion
 }

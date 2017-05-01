@@ -163,7 +163,6 @@ public class PhysicalEffect : MonoBehaviour
     #endregion
 
     #region Unity Functions
-
     private void Awake()
     {
         Initialize();
@@ -266,9 +265,8 @@ public class PhysicalEffect : MonoBehaviour
         float scale = FalloffScale(distance, radius, vibrationSettings.DistanceFalloff);
         float intensity = vibrationSettings.Intensity * scale;
         float duration = vibrationSettings.Duration * scale;
-
-
-        inanimateObject.LocalPlayer.AddVibration(new GamePadManager.Vibration(inanimateObject.LocalPlayer.Profile.ControllerId, intensity, duration));
+        
+        inanimateObject.LocalPlayer.AddVibration(new XboxInputManager.Vibration(inanimateObject.LocalPlayer.Profile.ControllerId, intensity, duration));
     }
     public static void ApplyScreenShake(InanimateObject inanimateObject, float distance, float radius, ScreenShakeSettings screenShakeSettings)
     {

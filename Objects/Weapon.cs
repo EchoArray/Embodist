@@ -5,36 +5,42 @@ using UnityEngine.Networking;
 public class Weapon : NetworkBehaviour
 {
     #region Values
-
     /// <summary>
     /// Defines the player controlling the weapon
     /// </summary>
     [HideInInspector]
     public int GamerId;
-    public InanimateObject Owner;
+
+    /// <summary>
+    /// Defines the physical effect applied to the caster upon firing.
+    /// </summary>
+    public PhysicalEffect FirePhysicalEffect;
+
     /// <summary>
     /// Defines the projectile that the weapon fires
     /// </summary>
+    [Space(5)]
     public GameObject Projectile;
+
+    /// <summary>
+    /// Defines the spread randomly applied to the projectile upon ejection
+    /// </summary>
+    [Space(15)]
+    public float Spread;
 
     /// <summary>
     /// Defines the duration in-which it takes for the barrel to recover after a shot
     /// </summary>
+    [Space(5)]
     public float ShotRecoveryDuration;
     // Defines the time that the shot will be recovered at
     private float _shotRecoveredTime;
-    /// <summary>
-    /// Defines the spread randomly applied to the projectile upon ejection
-    /// </summary>
-    public float Spread;
-
-    public GameObject FirePhysicalEffect;
-    private PhysicalEffect _firePhysicalEffect;
 
     /// <summary>
     /// Defines the amount of heat added upon ejection.
     /// </summary>
-    public float HeatAddition;
+    [Space(5)]
+    public float HeatRate = 200f;
     /// <summary>
     /// Defines the rate in-which the heat cools when not firing or overheated.
     /// </summary>
@@ -42,12 +48,14 @@ public class Weapon : NetworkBehaviour
     /// <summary>
     /// Determines if the weapon is overheated
     /// </summary>
+    [HideInInspector]
     [ValueReference("overheated")]
     public bool OverHeated;
 
     /// <summary>
     /// Defines the current heat of the weapon.
     /// </summary>
+    [HideInInspector]
     [ValueReference("heat")]
     public float Heat;
     // Determines if heat cooling will be skipped along the next frame.
@@ -55,35 +63,25 @@ public class Weapon : NetworkBehaviour
     #endregion
 
     #region Unity Functions
-    public void Awake()
-    {
-        Initialize();
-    }
     public void Update()
     {
-        UpdateHeatCooling();
+        UpdateCooling();
     } 
     #endregion
 
     #region Functions
-    private void Initialize()
-    {
-        if (FirePhysicalEffect != null)
-            _firePhysicalEffect = Instantiate(FirePhysicalEffect, this.transform.position, this.transform.rotation, this.transform).GetComponent<PhysicalEffect>(); 
-    }
-
-    public void IdentifyOwner(int gamerId, InanimateObject owner)
+    public void SetDefaults(int gamerId)
     {
         GamerId = gamerId;
-        Owner = owner;
     }
 
-    private void UpdateHeatCooling()
+    private void UpdateCooling()
     {
         if (!_skipHeatCooling)
             Heat = Mathf.Max(Heat - (HeatCoolRate * Time.deltaTime), 0);
         else
             _skipHeatCooling = false;
+
         if (OverHeated && Heat <= 50f)
         {
             OverHeated = false;
@@ -98,14 +96,16 @@ public class Weapon : NetworkBehaviour
             return;
         Eject();
     }
-
     private void Eject()
     {
+        if (FirePhysicalEffect != null)
+            FirePhysicalEffect.Cast(GamerId);
+
         // Define shot recovery time
         _shotRecoveredTime = Time.time + ShotRecoveryDuration;
 
         // Add to heat, stop heat from cooling next frame
-        Heat = Mathf.Min(Heat + (HeatAddition * Time.deltaTime), 100);
+        Heat = Mathf.Min(Heat + (HeatRate * Time.deltaTime), 100);
         _skipHeatCooling = true;
 
         // If the heat is equal to one hundred overheat the weapon
@@ -116,19 +116,14 @@ public class Weapon : NetworkBehaviour
         }
 
         // Instantiate new projectile, define projectiles caster
-        Quaternion direction = this.transform.rotation * Quaternion.Euler(Random.Range(-Spread, Spread), Random.Range(-Spread, Spread), 0);
-
-
-        GameObject newProjectile = Instantiate(Projectile, this.transform.position, direction);
+        Quaternion rotation = this.transform.rotation * Quaternion.Euler(Random.Range(-Spread, Spread), Random.Range(-Spread, Spread), 0);
+        
+        GameObject newProjectile = Instantiate(Projectile, this.transform.position, rotation);
         Projectile projectile = newProjectile.GetComponent<Projectile>();
-        projectile.SetDefaults(GamerId);
+        projectile.Cast(GamerId);
 
         if (!NetworkSessionManager.IsLocal)
-            NetworkSessionNode.Instance.SpawnProjectile(GamerId, Projectile, this.transform.position, direction, NetworkSessionManager.IsHost);
-
-
-        if (_firePhysicalEffect != null)
-            _firePhysicalEffect.Cast(GamerId);
+            NetworkSessionNode.Instance.SpawnProjectile(GamerId, Projectile, this.transform.position, rotation, NetworkSessionManager.IsHost);
     }
     #endregion
 }

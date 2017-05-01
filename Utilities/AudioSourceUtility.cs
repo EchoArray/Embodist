@@ -105,7 +105,7 @@ public class AudioSourceUtility : MonoBehaviour
         if (!UseSplitScreenVolumeScaling)
             return;
 
-        float shortestDistance = float.MaxValue;
+        float shortestDistance = Mathf.Infinity;
         // Find the closest camera
         for (int i = 0; i < Globals.Instance.Containers.Cameras.childCount; i++)
         {

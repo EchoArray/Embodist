@@ -18,6 +18,8 @@ public class Globals : MonoBehaviour
     /// </summary>
     public LayerMask LightmapColorLayers;
 
+    public CameraEffect CameraEffect;
+
     /// <summary>
     /// Defines the applied level of gravity.
     /// </summary>
@@ -43,6 +45,8 @@ public class Globals : MonoBehaviour
             public Color SmashySelectionColor;
         }
         public GenericColors Colors;
+
+        public CameraEffect TakeDamageCameraEffect;
 
         public float AngleBias = 43f;
 

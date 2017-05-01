@@ -11,24 +11,46 @@ public class TitleMenuManager : MonoBehaviour
 {
     #region Values
     public static TitleMenuManager Instance;
-
+    /// <summary>
+    /// Defines the menu control group for the start screen.
+    /// </summary>
     public MenuControlGroup StartScreen;
+    /// <summary>
+    /// Defines the menu control group for the custom game menu.
+    /// </summary>
     public MenuControlGroup CustomGameMenu;
+    /// <summary>
+    /// Defines the menu control group for the post game menu.
+    /// </summary>
+    public MenuControlGroup PostGameMenu;
+    /// <summary>
+    /// Defines the scorboard for the post game menu.
+    /// </summary>
+    public Scoreboard PostGameScoreBoard;
 
-    public MenuControlGroup PostGameMenuGroup;
-    public Transform PostGamePlayerStatContainer;
-    public GameObject PostGamePlayerStatPrefab;
-    public float PostGamePlayerStatVerticalMargin;
-
+    /// <summary>
+    /// Defines the container of instantiated player ui elements.
+    /// </summary>
     [Space(15)]
     public Transform PlayerUIContainer;
 
+    /// <summary>
+    /// Defines the menu player element instantiated to represent a registed player.
+    /// </summary>
     [Space(5)]
     public GameObject MenuPlayerPrefab;
+    /// <summary>
+    /// Defines the menu player join element instantiated to represent an absent registration.
+    /// </summary>
     public GameObject MenuPlayerJoinPrefab;
+    /// <summary>
+    /// Defines the margin between menu player ui elements.
+    /// </summary>
     public float MenuPlayerElementMargin;
 
+    // Defines the ammount of registed players.
     private int _registeredPlayerCount;
+    // A collection of menu player join elements.
     private List<GameObject> _menuPlayerJoinObjects = new List<GameObject>();
 
     #endregion
@@ -41,10 +63,9 @@ public class TitleMenuManager : MonoBehaviour
 
     private void Update()
     {
-        UpdateLocalPlayers();
-        RefreshPlayerUI();
+        UpdateJoinUI();
+        UpdateUIPositions();
     }
-
     #endregion
 
     #region Functions
@@ -52,19 +73,14 @@ public class TitleMenuManager : MonoBehaviour
     {
         if (GameManager.Dirty)
         {
-            PostGameMenuGroup.Show(null);
-            BuildPostGame();
-            BuildPlayerUI();
-            UpdateLocalPlayers();
+            PostGameMenu.Show(null);
+            AddAllPlayersUI();
+            UpdateJoinUI();
         }
         else
-        {
-            StartScreen.Show(null);            
-        }
-        Instance = this;
+            StartScreen.Show(null);
 
-        NetworkManagerHUD networkManagerHUD = FindObjectOfType<NetworkManagerHUD>();
-        networkManagerHUD.showGUI = true;
+        Instance = this;
     }
 
     public void ClientStateChanged()
@@ -72,37 +88,70 @@ public class TitleMenuManager : MonoBehaviour
         CustomGameMenu.LoadAllSettings();
     }
 
-    private void UpdateLocalPlayers()
+    private void UpdateJoinUI()
     {
-        // Defines how many players there is room for
+        // Defines how many players there is room for in the game - eg if the max is 8 and there are 7 players only show 1 slot
         int availableSlots = Mathf.Min(GameManager.Instance.MaxProfileCount - GameManager.Instance.Game.Profiles.Count, 4);
-        // 
-        int unregisteredPlayerCount = Mathf.Min(GamePadManager.ConnectedControllerCount - _registeredPlayerCount, availableSlots);
+        // Defines how many unregisted players there are
+        int unregisteredPlayerCount = Mathf.Min(XboxInputManager.ConnectedControllerCount - _registeredPlayerCount, availableSlots);
 
+        // Remove existing menu objects if there are less unregistered players than menu objects
         if (_menuPlayerJoinObjects.Count > 0 && unregisteredPlayerCount < _menuPlayerJoinObjects.Count)
         {
-            int disconnectedControllerCount = _menuPlayerJoinObjects.Count - unregisteredPlayerCount;
-            for (int i = 0; i < disconnectedControllerCount; i++)
+            int removalCount = _menuPlayerJoinObjects.Count - unregisteredPlayerCount;
+            for (int i = 0; i < removalCount; i++)
             {
-                GameObject menuPlayerJoinObject = _menuPlayerJoinObjects[0];
-                _menuPlayerJoinObjects.RemoveAt(0);
-                Destroy(menuPlayerJoinObject);
+                RemovePlayerJoinUI(0);
+
+                if (i < 0)
+                    i--;
             }
         }
+        else if (unregisteredPlayerCount > _menuPlayerJoinObjects.Count)
+        {
+            int absentCount = unregisteredPlayerCount - _menuPlayerJoinObjects.Count;
+            for (int i = 0; i < absentCount; i++)
+                _menuPlayerJoinObjects.Add(Instantiate(MenuPlayerJoinPrefab, PlayerUIContainer));
+        }
 
-        int absentJoinObjectCount = unregisteredPlayerCount - _menuPlayerJoinObjects.Count;
-        for (int i = 0; i < absentJoinObjectCount; i++)
-            _menuPlayerJoinObjects.Add(Instantiate(MenuPlayerJoinPrefab, PlayerUIContainer));
+    }
+    private void UpdateUIPositions()
+    {
+        float offset = 0;
+
+        for (int teamIndex = 0; teamIndex < GameManager.Instance.Game.Teams.Count; teamIndex++)
+            for (int profileIndex = 0; profileIndex < GameManager.Instance.Game.Profiles.Count; profileIndex++)
+                offset = RefreshPlayerUI(teamIndex, profileIndex, offset);
+
+        for (int menuPlayerJoinIndex = 0; menuPlayerJoinIndex < _menuPlayerJoinObjects.Count; menuPlayerJoinIndex++)
+            offset = RefreshPlayerJoinUI(menuPlayerJoinIndex, offset);
     }
 
-    public void BuildPlayerUI()
+    public void AddAllPlayersUI()
     {
         foreach (GameManager.GameAspects.Profile profile in GameManager.Instance.Game.Profiles)
             AddPlayerUI(profile);
     }
-    public void AddPlayerUI(GameManager.GameAspects.Profile profile)
+
+    public void RemovePlayerJoinUI(int index)
+    {
+        Destroy(_menuPlayerJoinObjects[index]);
+        _menuPlayerJoinObjects.RemoveAt(index);
+    }
+    public void RemovePlayerUI(GameManager.GameAspects.Profile profile)
     {
         if(profile.Local)
+            _registeredPlayerCount -= 1;
+        Destroy(profile.UIElement);
+    }
+
+    public void AddPlayerJoinUI()
+    {
+        _menuPlayerJoinObjects.Add(Instantiate(MenuPlayerJoinPrefab, PlayerUIContainer));
+    }
+    public void AddPlayerUI(GameManager.GameAspects.Profile profile)
+    {
+        if (profile.Local)
             _registeredPlayerCount += 1;
 
         GameObject menuPlayerObject = Instantiate(MenuPlayerPrefab, PlayerUIContainer);
@@ -111,116 +160,41 @@ public class TitleMenuManager : MonoBehaviour
         menuPlayerObject.name = "ui_player_" + profile.Name;
         profile.UIElement = menuPlayerObject;
     }
-    public void RemovePlayerUI(GameManager.GameAspects.Profile profile)
+
+    public float RefreshPlayerUI(int teamIndex, int profileIndex, float offset)
     {
-        if(profile.Local)
-            _registeredPlayerCount -= 1;
-        Destroy(profile.UIElement);
-    }
-    public void RefreshPlayerUI()
-    {
-        float horizontalOffset = 0;
-        if (GameManager.Instance.Game.GameType.TeamGame)
+        if (GameManager.Instance.Game.Profiles[profileIndex].TeamId == teamIndex)
         {
-            for (int teamIndex = 0; teamIndex < GameManager.Instance.Game.Teams.Count; teamIndex++)
-            {
-                for (int profileIndex = 0; profileIndex < GameManager.Instance.Game.Profiles.Count; profileIndex++)
-                {
-                    if (GameManager.Instance.Game.Profiles[profileIndex].TeamId == teamIndex)
-                    {
-                        RectTransform rectTransform = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<RectTransform>();
+            RectTransform rectTransform = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<RectTransform>();
 
-                        float halfWidth = rectTransform.sizeDelta.x / 2;
-                        Vector2 position = new Vector2(halfWidth + ((rectTransform.sizeDelta.x + MenuPlayerElementMargin) * profileIndex), 0);
-                        rectTransform.anchoredPosition = position;
-                        float newHorizontalOffset = position.x + halfWidth;
-                        if (newHorizontalOffset > horizontalOffset)
-                            horizontalOffset = newHorizontalOffset;
+            float halfWidth = rectTransform.sizeDelta.x / 2;
+            Vector2 position = new Vector2(halfWidth + ((rectTransform.sizeDelta.x + MenuPlayerElementMargin) * profileIndex), 0);
 
-                        rectTransform.localScale = Vector3.one;
+            rectTransform.anchoredPosition = position;
+            float newOffset = position.x + halfWidth;
+            if (newOffset > offset)
+                offset = newOffset;
 
-                        MaskableGraphic maskableGraphic = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<MaskableGraphic>();
-
-                        maskableGraphic.color = GameManager.Instance.Game.Teams[GameManager.Instance.Game.Profiles[profileIndex].TeamId].Color;
-                    }
-                }
-            }
-        }
-        else
-        {
-            for (int profileIndex = 0; profileIndex < GameManager.Instance.Game.Profiles.Count; profileIndex++)
-            {
-                RectTransform rectTransform = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<RectTransform>();
-                float halfWidth = rectTransform.sizeDelta.x / 2;
-
-                Vector2 position = new Vector2(halfWidth + ((rectTransform.sizeDelta.x + MenuPlayerElementMargin) * profileIndex), 0);
-                rectTransform.anchoredPosition = position;
-                horizontalOffset = position.x + halfWidth;
-
-                rectTransform.localScale = Vector3.one;
-
-                MaskableGraphic maskableGraphic = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<MaskableGraphic>();
-                maskableGraphic.color = GameManager.Instance.PlayerColor;
-            }
-        }
-
-        for (int menuPlayerJoinIndex = 0; menuPlayerJoinIndex < _menuPlayerJoinObjects.Count; menuPlayerJoinIndex++)
-        {
-            RectTransform rectTransform = _menuPlayerJoinObjects[menuPlayerJoinIndex].GetComponent<RectTransform>();
             rectTransform.localScale = Vector3.one;
-            if (menuPlayerJoinIndex == 0 && horizontalOffset != 0)
-            {
-                rectTransform.anchoredPosition = new Vector2(horizontalOffset + (rectTransform.sizeDelta.x / 2) + MenuPlayerElementMargin, 0);
-                horizontalOffset += MenuPlayerElementMargin;
-            }
-            else
-                rectTransform.anchoredPosition = new Vector2(horizontalOffset + (rectTransform.sizeDelta.x / 2) + ((rectTransform.sizeDelta.x + MenuPlayerElementMargin) * menuPlayerJoinIndex), 0);
+
+            MaskableGraphic maskableGraphic = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<MaskableGraphic>();
+            maskableGraphic.color = GameManager.Instance.Game.GameType.TeamGame ? GameManager.Instance.Game.Teams[GameManager.Instance.Game.Profiles[profileIndex].TeamId].Color :
+                 GameManager.Instance.PlayerColor;
         }
-
+        return offset;
     }
-
-    public void BuildPostGame()
+    public float RefreshPlayerJoinUI(int index, float offset)
     {
-        int postion = 0;
-        if (GameManager.Instance.Game.GameType.TeamGame)
+        RectTransform rectTransform = _menuPlayerJoinObjects[index].GetComponent<RectTransform>();
+        rectTransform.localScale = Vector3.one;
+        if (index == 0 && offset != 0)
         {
-            for (int teamIndex = 0; teamIndex < GameManager.Instance.Game.Teams.Count; teamIndex++)
-            {
-                foreach (GameManager.GameAspects.Profile profile in GameManager.Instance.Game.Profiles)
-                    if (profile.TeamId == teamIndex)
-                    {
-                        GameObject newPlayerStat = Instantiate(PostGamePlayerStatPrefab, PostGamePlayerStatContainer);
-
-                        MenuStat menuPlayerStats = newPlayerStat.GetComponent<MenuStat>();
-                        menuPlayerStats.Populate(profile);
-
-                        RectTransform playerStatRectTransform = newPlayerStat.GetComponent<RectTransform>();
-                        playerStatRectTransform.localScale = Vector3.one;
-                        playerStatRectTransform.sizeDelta = new Vector2(playerStatRectTransform.sizeDelta.x, playerStatRectTransform.sizeDelta.y);
-                        playerStatRectTransform.anchoredPosition = new Vector2((playerStatRectTransform.sizeDelta.x / 2), -(playerStatRectTransform.sizeDelta.y / 2) - (playerStatRectTransform.sizeDelta.y * postion) - (PostGamePlayerStatVerticalMargin * postion));
-
-                        postion++;
-                    }
-            }
+            rectTransform.anchoredPosition = new Vector2(offset + (rectTransform.sizeDelta.x / 2) + MenuPlayerElementMargin, 0);
+            return offset += MenuPlayerElementMargin;
         }
         else
-        {
-            foreach (GameManager.GameAspects.Profile profile in GameManager.Instance.Game.Profiles)
-            {
-                GameObject newPlayerStat = Instantiate(PostGamePlayerStatPrefab, PostGamePlayerStatContainer);
-
-                MenuStat menuPlayerStats = newPlayerStat.GetComponent<MenuStat>();
-                menuPlayerStats.Populate(profile);
-
-                RectTransform playerStatRectTransform = newPlayerStat.GetComponent<RectTransform>();
-                playerStatRectTransform.localScale = Vector3.one;
-                playerStatRectTransform.sizeDelta = new Vector2(playerStatRectTransform.sizeDelta.x, playerStatRectTransform.sizeDelta.y);
-                playerStatRectTransform.anchoredPosition = new Vector2((playerStatRectTransform.sizeDelta.x / 2), -(playerStatRectTransform.sizeDelta.y / 2) - (playerStatRectTransform.sizeDelta.y * postion) - (PostGamePlayerStatVerticalMargin * postion));
-
-                postion++;
-            }
-        }
-
+            rectTransform.anchoredPosition = new Vector2(offset + (rectTransform.sizeDelta.x / 2) + ((rectTransform.sizeDelta.x + MenuPlayerElementMargin) * index), 0);
+        return offset;
     }
     #endregion
 }

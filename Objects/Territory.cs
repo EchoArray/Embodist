@@ -299,7 +299,7 @@ public class Territory : NetworkBehaviour
 
             bool local = GameManager.Instance.GetProfileByGamerId(_captorGamerId).Local;
             if (local)
-                _occupants[0].Die(false);
+                _occupants[0].Kill(false);
             else
                 RpcDetonateBomb();
 
@@ -314,7 +314,7 @@ public class Territory : NetworkBehaviour
         if (local)
         {
             InanimateObject inanimateObject = GameManager.Instance.GetInanimateByGamerId(_captorGamerId);
-            inanimateObject.Die(false);
+            inanimateObject.Kill(false);
         }
     }
 

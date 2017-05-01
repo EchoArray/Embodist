@@ -9,6 +9,7 @@ public class CameraController : MonoBehaviour
     /// <summary>
     /// Defines the controlling player of the camera controller.
     /// </summary>
+    [HideInInspector]
     public LocalPlayer LocalPlayer;
 
     /// <summary>
@@ -17,32 +18,52 @@ public class CameraController : MonoBehaviour
     [HideInInspector]
     public Camera Camera;
 
+    public CameraEffector CameraEffector;
+
     /// <summary>
     /// Defines the deduction of the field of view when there are two local players.
     /// </summary>
     public float TwoByFovReduction;
 
+    /// <summary>
+    /// Determines if the camera cotroller is currently zooming.
+    /// </summary>
     [HideInInspector]
     public bool Zooming;
+    /// <summary>
+    /// Defines the default field of view of the camera controller.
+    /// </summary>
+    [Space(5)]
     public float DefaultFieldOfView;
+    /// <summary>
+    /// Defines the zoomed field of view of the camera controller.
+    /// </summary>
     public float ZoomedFieldOfView;
-    public float ZoomSpeed;
+    /// <summary>
+    /// Defines the rate in-which the camera controller zooms.
+    /// </summary>
+    public float ZoomRate;
 
-    public float ScreenShakeSpeed;
+    /// <summary>
+    /// Defines the rate in-which the camera controller shakes.
+    /// </summary>
+    [Space(5)]
+    public float ShakeRate;
 
     /// <summary>
     /// Defines the speed in which the camera rotates.
     /// </summary>
-    public float RotationSpeed;
+    [Space(5)]
+    public float RotationRate;
 
     [ValueReference("auto_spawn_duration")]
+    [HideInInspector]
     public float AutoSpawnDuration;
 
     /// <summary>
     /// Defines the radius in-which the camera is allowed to select a prospect inanimate object.
     /// </summary>
-    [Space(15)]
-    [Header("Selection Defaults")]
+    [Header("Selection")]
     public float SelectionRadius;
     /// <summary>
     /// Defines the distance in-which the camera is allowed to select a prospect inanimate object.
@@ -62,19 +83,19 @@ public class CameraController : MonoBehaviour
     public SelectState SelectionState;
 
     /// <summary>
-    /// Defines the name of the inanimate object that the camera is currently viewing for attachment.
-    /// </summary>
-    [HideInInspector]
-    [ValueReference("prospect_attach_name")]
-    public string ProspectAttachName;
-
-    /// <summary>
     /// Defines the classification of the inanimate object that the camera is currently viewing for attachment.
     /// </summary>
     [HideInInspector]
     [ValueReference("prospect_attach_class")]
     public InanimateObject.Classification ProspectAttachClass;
+
+    // Defines the prospect inanaimate object for selection.
     private InanimateObject _prospectSelection;
+    /// <summary>
+    /// Determines if the camera controller is currently waiting to attach to an inanaimate object.
+    /// </summary>
+    [HideInInspector]
+    public bool AwaitingAttachment;
 
     /// <summary>
     /// Defines the speed in which the camera moves when in free cam.
@@ -89,54 +110,74 @@ public class CameraController : MonoBehaviour
     /// <summary>
     /// Defines the constraints of the camera controllers rotation along the X axis while attached.
     /// </summary>
-    [Space(15)]
-    [Header("Attached Defaults")]
+
+    [Header("Attached")]
     public Vector2 AttachedOrbitPitchRange;
 
     /// <summary>
     /// Defines the distance forward from the collision point the camera will rest at.
     /// </summary>
     public float AttachedCollisionOffset;
+    /// <summary>
+    /// Defines the distance from the colliding position that the camera will be offset using the colliding surfaces normal.
+    /// </summary>
     public float AttachedCollisionDistanceAddition;
     /// <summary>
     /// Determines which layers the camera's collision ignores.
     /// </summary>
     public LayerMask AttachedCollisionIgnoredLayers;
+    /// <summary>
+    /// Defines the turning scale of the camera controller.
+    /// </summary>
+    [HideInInspector]
+    public float AttachedTurningScale = 1;
 
+    /// <summary>
+    /// Defines the rate in-which the area isolator material will fade.
+    /// </summary>
     public float AreaIsolatorFadeRate;
-
-    public float TurningScale = 1;
-
-    public bool AwaitingAttachment;
 
     public class ScreenShake
     {
-        public float Duration;
-        public float DurationRemaining;
+        /// <summary>
+        /// Defines the duration in-which the screen will shake.
+        /// </summary>
+        public float StartTime;
+        /// <summary>
+        /// Defines the duration remaing of the screen shake.
+        /// </summary>
+        public float KillTime;
+        /// <summary>
+        /// Defines the intensity at which the screen will shake.
+        /// </summary>
         public float Intensity;
+        /// <summary>
+        /// Defines the intensity at which the screen will shake over its lifetime.
+        /// </summary>
         public AnimationCurve LifetimeIntensity;
 
         public ScreenShake(float duration, float intensity, AnimationCurve lifetimeIntensity)
         {
-            Duration = duration;
-            DurationRemaining = duration;
+            StartTime = Time.time;
+            KillTime = Time.time + duration;
             Intensity = intensity;
             LifetimeIntensity = lifetimeIntensity;
         }
     }
     private List<ScreenShake> _screenShakes = new List<ScreenShake>();
 
+    // Defines if the camera controller is currently attached to an inanaimate object.
     private bool _attached;
-    // A collection of previously generated regular polys.
-    private static Dictionary<int, Vector2[]> _storedRegularPolys = new Dictionary<int, Vector2[]>();
 
     // Defines the rigid body component of the game object.
     private Rigidbody _rigidBody;
     // Defines the sphere collider component of the game object.
     private SphereCollider _sphereCollider;
-
-    private Material _isolatorMaterial;
+    // Defines the area isolater material
+    private Material _isolatorMaterialInstance;
+    // Defines the starting color of the area isolator material
     private Color _isolatorMaterialStartingColor;
+    // Define the along the area isolators fade
     private float _isolatorColorTime;
     #endregion
 
@@ -149,24 +190,29 @@ public class CameraController : MonoBehaviour
 
     private void Update()
     {
-        UpdateFieldOfView();
-        UpdateCameraShake();
+        UpdateZoom();
+        UpdateShake();
         UpdateAutoAttach();
     }
-    
-    public void OnPreRender()
+
+    private void OnPreRender()
     {
         if (_prospectSelection != null)
             _prospectSelection.ToggleProspectColor(true);
         
         RenderAreaIsolatorMaterial();
-        SetIsolatorMaterial();
+        SetAllIsolatorMaterials(_isolatorMaterialInstance);
         RenderBombObjectives();
     }
-    public void OnPostRender()
+    private void OnPostRender()
     {
         if (_prospectSelection != null)
             _prospectSelection.ToggleProspectColor(false);
+    }
+
+    private void OnDestroy()
+    {
+        Destroy(_isolatorMaterialInstance);
     }
     #endregion
 
@@ -177,13 +223,66 @@ public class CameraController : MonoBehaviour
         _rigidBody = this.gameObject.GetComponent<Rigidbody>();
         _sphereCollider = this.gameObject.GetComponent<SphereCollider>();
         Camera = this.gameObject.GetComponent<Camera>();
+        CameraEffector = this.gameObject.GetComponent<CameraEffector>();
 
-        _isolatorMaterial = new Material(Globals.Instance.AreaIsolatorMaterial);
-        _isolatorMaterialStartingColor = _isolatorMaterial.GetColor("_TintColor");
+        _isolatorMaterialInstance = new Material(Globals.Instance.AreaIsolatorMaterial);
+        _isolatorMaterialStartingColor = _isolatorMaterialInstance.GetColor("_TintColor");
 
-        SetCameraAttributes(false);
+        SetAttributes(false);
     }
 
+    /// <summary>
+    /// Defines the attributes of the camera controller based on attachment state.
+    /// </summary>
+    /// <param name="attached"></param>
+    public void SetAttributes(bool attached)
+    {
+        if (!attached)
+        {
+            _screenShakes.Clear();
+            AttachedTurningScale = 1;
+        }
+        if (_attached != attached)
+        {
+            _isolatorColorTime = 0;
+            SetAutoAttachDuration();
+        }
+
+        _attached = attached;
+        Zooming = false;
+        _sphereCollider.enabled = !attached;
+    }
+
+    /// <summary>
+    /// Defines the size and position of the camera's rect based on the quantity of local players.
+    /// </summary>
+    /// <param name="localPlayerCount"> The quantity of local players.</param>
+    /// <param name="index"> The index of the camera's player.</param>
+    public void AppropriateRect(int localPlayerCount, int index)
+    {
+        if (localPlayerCount == 1)
+            return;
+        // If the player count is two, set full width, half height, and stack vertically
+        // If the player count is three, set quarter size, if the index is less that two stack horizontally at the top of the screen
+        // and if the index is three center at the bottom
+        // If the player count is four, set quarter size, if the index is less than two stack horizontally at the top of the screen
+        // otherwise stack horizontally at the bottom of the screen
+        float x = 0;
+        float y = index < 2 ? 0.5f : 0;
+        if (localPlayerCount == 2)
+            y = index == 0 ? 0.5f : 0;
+        else if (localPlayerCount == 3)
+            x = index < 2 ? (index % 2 == 0 ? 0 : 0.5f) : 0.25f;
+        else
+            x = index % 2 == 0 ? 0 : 0.5f;
+        Camera.rect = new Rect(x, y, localPlayerCount == 2 ? 1 : 0.5f, 0.5f);
+        // Reduce field of view if the player count is two
+        DefaultFieldOfView -= localPlayerCount == 2 ? TwoByFovReduction : 0;
+        ZoomedFieldOfView -= localPlayerCount == 2 ? TwoByFovReduction : 0;
+        Camera.fieldOfView = DefaultFieldOfView;
+    }
+
+    #region Rotation, Movement, Zoom
     /// <summary>
     /// Moves the camera controller along the input direction if it is currently no attached to an inanimate object.
     /// </summary>
@@ -192,8 +291,8 @@ public class CameraController : MonoBehaviour
     {
         // Set camera velocity based on input
         float speed = boosting ? SelectingFlyingBoostedSpeed : SelectingFlyingSpeed;
-        Vector3 horizontalVelocity = ((this.transform.right * input.x) + (this.transform.forward * input.y)) * speed * Time.deltaTime;
-        _rigidBody.velocity = horizontalVelocity;
+        
+        _rigidBody.velocity = (this.transform.rotation * new Vector3(input.x, 0, input.y)) * speed * Time.deltaTime;
     }
 
     /// <summary>
@@ -204,8 +303,8 @@ public class CameraController : MonoBehaviour
     {
         // Define rotation speed, define look inversion then create new rotation
         float rotationSpeed = LocalPlayer.InanimateObject != null && LocalPlayer.InanimateObject.Movement.Lunging ?
-        RotationSpeed * Globals.Instance.InanimateDefaults.Light.Lunge.CameraOrbitSensitivity : RotationSpeed * GameManager.GetLookSensitivity(LocalPlayer.Profile.LookSensitivity);
-        rotationSpeed *= TurningScale;
+        RotationRate * Globals.Instance.InanimateDefaults.Light.Lunge.CameraOrbitSensitivity : RotationRate * GameManager.GetLookSensitivity(LocalPlayer.Profile.LookSensitivity);
+        rotationSpeed *= AttachedTurningScale;
 
         Vector3 newRotation = this.transform.eulerAngles + new Vector3(input.y * rotationSpeed, input.x * rotationSpeed, 0) * Time.deltaTime;
 
@@ -237,58 +336,110 @@ public class CameraController : MonoBehaviour
             LocalPlayer.InanimateObject.gameObject.layer = layerBackup;
         }
     }
-
-    private void UpdateFieldOfView()
+    private static float ClampAngle(float angle, Vector2 minMax)
     {
-        float targetFieldOfView = Zooming ? ZoomedFieldOfView : DefaultFieldOfView;
-        Camera.fieldOfView = Mathf.MoveTowards(Camera.fieldOfView, targetFieldOfView, Time.deltaTime * ZoomSpeed);
+        // Clamps and angle between a minimum and maximum angle.
+        // Make our range between [0-360]
+        angle = (360 + (angle % 360)) % 360;
+        minMax.x = (360 + (minMax.x % 360)) % 360;
+        minMax.y = (360 + (minMax.y % 360)) % 360;
+
+        // If min is less than max
+        if (minMax.x <= minMax.y)
+            Mathf.Clamp(angle, minMax.x, minMax.y);
+        else
+        {
+            // If in bounds, if not, return
+            if (angle >= 0 && angle <= minMax.y)
+                return angle;
+            else if (angle <= 360 && angle >= minMax.x)
+                return angle;
+            else
+            {
+                // Clamp to closest
+                if (Mathf.Abs(angle - minMax.y) < Mathf.Abs(angle - minMax.x))
+                    return minMax.y;
+                else
+                    return minMax.x;
+            }
+
+        }
+
+        return 0;
     }
 
-    private void UpdateCameraShake()
+    private void UpdateZoom()
+    {
+        float targetFieldOfView = Zooming ? ZoomedFieldOfView : DefaultFieldOfView;
+        Camera.fieldOfView = Mathf.MoveTowards(Camera.fieldOfView, targetFieldOfView, Time.deltaTime * ZoomRate);
+    }
+    #endregion
+
+    #region Shake
+    private void UpdateShake()
     {
         float intensity = 0;
+        float direction = RandomDirection();
         for (int i = 0; i < _screenShakes.Count; i++)
         {
             ScreenShake screenShake = _screenShakes[i];
+
             // Scale intensity
-            float scaleTime = screenShake.DurationRemaining / screenShake.Duration;
-            float scale = screenShake.LifetimeIntensity.Evaluate(scaleTime);
-            intensity += GetRandomDirection() * screenShake.Intensity * scale;
+            float duration = screenShake.KillTime - screenShake.StartTime;
+            float timeRemaining = screenShake.KillTime - Time.time;
+
+            float scale = screenShake.LifetimeIntensity.Evaluate(timeRemaining / duration);
+            intensity += screenShake.Intensity * scale;
 
             // Remove screen shake if duration has become durated
-            screenShake.DurationRemaining -= Time.deltaTime;
-            if (screenShake.DurationRemaining <= 0)
+            if (Time.time >= screenShake.KillTime)
             {
-                _screenShakes.Remove(screenShake);
                 i--;
+                _screenShakes.Remove(screenShake);
             }
         }
 
         // Apply rotation
         Vector3 targetRotation = this.transform.eulerAngles;
-        targetRotation.z = intensity;
-        this.transform.rotation = Quaternion.RotateTowards(this.transform.rotation, Quaternion.Euler(targetRotation), Time.deltaTime * (ScreenShakeSpeed + intensity));
+        targetRotation.z = direction * intensity;
+        this.transform.rotation = Quaternion.RotateTowards(this.transform.rotation, Quaternion.Euler(targetRotation), (ShakeRate + intensity) * Time.deltaTime);
     }
+    private int RandomDirection()
+    {
+        int direction = Random.Range(0, 2);
+        return direction == 0 ? -1 : 1;
+    }
+    /// <summary>
+    /// Adds a shake to the camera.
+    /// </summary>
+    /// <param name="duration">Define the duration at-which the camera will shake.</param>
+    /// <param name="intensity">Defines the intensity at-which the camera will shake.</param>
+    /// <param name="lifetimeIntensity">Defines the intensity over the lifetime of the camera shake.</param>
     public void AddShake(float duration, float intensity, AnimationCurve lifetimeIntensity)
     {
         _screenShakes.Add(new ScreenShake(duration, intensity, lifetimeIntensity));
     }
-    public void AddShake(PhysicalEffect physicalEffect)
-    {
-        _screenShakes.Add(new ScreenShake(physicalEffect.ScreenShake.Duration, physicalEffect.ScreenShake.Intensity, physicalEffect.ScreenShake.IntensityOverLifetime));
-    }
+    #endregion
 
-
+    #region Rendering
     private void RenderAreaIsolatorMaterial()
     {
-        _isolatorColorTime = Mathf.Min(_isolatorColorTime + Time.deltaTime * AreaIsolatorFadeRate, 1);
-        Color color = _isolatorMaterialStartingColor;
-        if (_attached)
-            color = Color.Lerp(_isolatorMaterialStartingColor, Color.black, _isolatorColorTime);
-        else
-            color = Color.Lerp(Color.black, _isolatorMaterialStartingColor, _isolatorColorTime);
+        if (_isolatorColorTime != 1)
+        {
+            _isolatorColorTime = Mathf.Min(_isolatorColorTime + Time.deltaTime * AreaIsolatorFadeRate, 1);
 
-        _isolatorMaterial.SetColor("_TintColor", color);
+            Color color = _isolatorMaterialStartingColor * (_attached ? (1 - _isolatorColorTime) : _isolatorColorTime);
+            _isolatorMaterialInstance.SetColor("_TintColor", color);
+        }
+    }
+    private void SetAllIsolatorMaterials(Material material)
+    {
+        for (int i = 0; i < Globals.Instance.Containers.AreaIsolators.childCount; i++)
+        {
+            Transform transform = Globals.Instance.Containers.AreaIsolators.GetChild(i);
+            Renderer renderer = transform.GetComponent<Renderer>();
+            renderer.sharedMaterial = material;
+        }
     }
 
     private void RenderBombObjectives()
@@ -299,27 +450,10 @@ public class CameraController : MonoBehaviour
         Territory[] territories = FindObjectsOfType<Territory>();
         foreach (Territory territory in territories)
             territory.gameObject.SetActive(territory.TeamId != LocalPlayer.Profile.TeamId);
-    }
+    } 
+    #endregion
 
-
-    public void HighlightProspect()
-    {
-        // Sets the details of the prospect inanimate object, and determines if its allowed to be selected.
-        // Populate name, class and selection state
-        ProspectAttachName = _prospectSelection.Name;
-        ProspectAttachClass = _prospectSelection.Class;
-
-        // Determine selection state, return denied if the prospect selections class is disabled in the gametype
-        SelectionState = IsClassEnabled(_prospectSelection) ? CameraController.SelectState.Allowed : CameraController.SelectState.Denied;
-    }
-    public void UnHighlightProspect()
-    {
-        // Clears the details of the previous prospect selection.
-        _prospectSelection = null;
-        SelectionState = CameraController.SelectState.None;
-        ProspectAttachClass = InanimateObject.Classification.None;
-        ProspectAttachName = string.Empty;
-    }
+    #region Selection
     /// <summary>
     /// Displays selection state and allows selection of an inanimate object when unattached.
     /// </summary>
@@ -360,6 +494,22 @@ public class CameraController : MonoBehaviour
                 SelectProspect(_prospectSelection);
         }
     }
+    public void HighlightProspect()
+    {
+        // Sets the details of the prospect inanimate object, and determines if its allowed to be selected.
+        // Populate name, class and selection state
+        ProspectAttachClass = _prospectSelection.Class;
+
+        // Determine selection state, return denied if the prospect selections class is disabled in the gametype
+        SelectionState = IsClassEnabled(_prospectSelection.Class) ? CameraController.SelectState.Allowed : CameraController.SelectState.Denied;
+    }
+    public void UnHighlightProspect()
+    {
+        // Clears the details of the previous prospect selection.
+        _prospectSelection = null;
+        SelectionState = CameraController.SelectState.None;
+        ProspectAttachClass = InanimateObject.Classification.None;
+    }
     private void SelectProspect(InanimateObject inanimateObject)
     {
         if (AwaitingAttachment)
@@ -368,53 +518,49 @@ public class CameraController : MonoBehaviour
         if (NetworkClient.active)
         {
             AwaitingAttachment = true;
-            NetworkIdentity inan = inanimateObject.gameObject.GetComponent<NetworkIdentity>();
-            NetworkSessionNode.Instance.CmdRequestAttach(inan, LocalPlayer.Profile.ControllerId, LocalPlayer.Profile.GamerId, LocalPlayer.Profile.TeamId);
+            NetworkIdentity networkIdentity = inanimateObject.gameObject.GetComponent<NetworkIdentity>();
+            NetworkSessionNode.Instance.CmdRequestAttach(networkIdentity, LocalPlayer.Profile.ControllerId, LocalPlayer.Profile.GamerId, LocalPlayer.Profile.TeamId);
         }
         else
         {
             // Selects a prospect inanimate object.
             UnHighlightProspect();
-            SetCameraAttributes(true);
+            SetAttributes(true);
             LocalPlayer.AttachTo(inanimateObject);
         }
     }
-    public bool IsClassEnabled(InanimateObject inanimateObject)
-    {
-        bool enabled = true;
-        if (inanimateObject.Class == InanimateObject.Classification.Throwy && !GameManager.Instance.Game.GameType.ThrowyAllowed)
-            enabled = false;
-        else if (inanimateObject.Class == InanimateObject.Classification.Squirty && !GameManager.Instance.Game.GameType.SquirtyAllowed)
-            enabled = false;
-        else if (inanimateObject.Class == InanimateObject.Classification.Smashy && !GameManager.Instance.Game.GameType.FloppyAllowed)
-            enabled = false;
-        return enabled;
-    }
 
-    public void AutoAttach()
+
+    private void AutoAttach()
     {
         LocalPlayer.Respawn();
-        for (int j = 0; j < Globals.Instance.Containers.Objects.childCount; j++)
-        {
-            InanimateObject inanimateObject = Globals.Instance.Containers.Objects.GetChild(j).gameObject.GetComponent<InanimateObject>();
 
-            if (!inanimateObject.Controlled && IsClassEnabled(inanimateObject))
+        int objectIndex = -1;
+        InanimateObject inanimateObject = null;
+
+        while (true)
+        {
+            objectIndex = Random.Range(0, Globals.Instance.Containers.Objects.childCount - 1);
+            inanimateObject = Globals.Instance.Containers.Objects.GetChild(objectIndex).gameObject.GetComponent<InanimateObject>();
+            if (!inanimateObject.Controlled && IsClassEnabled(inanimateObject.Class))
             {
+                // Cast a ray to make sure the prospect selection isnt in an isolated area
                 RaycastHit raycastHit;
                 Vector3 direction = inanimateObject.transform.position - this.transform.position;
                 bool hit = Physics.Raycast(this.transform.position, direction, out raycastHit, Mathf.Infinity);
+
                 if (hit && raycastHit.collider.gameObject == inanimateObject.gameObject)
-                {
                     SelectProspect(inanimateObject);
-                    return;
-                }
+
+                break;
             }
         }
     }
-    public void UpdateAutoAttach()
+    private void UpdateAutoAttach()
     {
         if (AwaitingAttachment)
             return;
+
         if (!_attached)
         {
             if (AutoSpawnDuration > 0)
@@ -423,69 +569,25 @@ public class CameraController : MonoBehaviour
                 AutoAttach();
         }
     }
-    public void SetAutoAttachDuration()
+    private void SetAutoAttachDuration()
     {
         AutoSpawnDuration = GameManager.Instance.Game.GameType.AutoAttachDuration;
     }
 
-    public void SetIsolatorMaterial()
+    private bool IsClassEnabled(InanimateObject.Classification classification)
     {
-        for (int i = 0; i < Globals.Instance.Containers.AreaIsolators.childCount; i++)
-        {
-            Transform transform = Globals.Instance.Containers.AreaIsolators.GetChild(i);
-            Renderer renderer = transform.GetComponent<Renderer>();
-            renderer.sharedMaterial = _isolatorMaterial;
-        }
-    }
+        bool enabled = true;
+        if (classification == InanimateObject.Classification.Throwy && !GameManager.Instance.Game.GameType.ThrowyAllowed)
+            enabled = false;
+        else if (classification == InanimateObject.Classification.Squirty && !GameManager.Instance.Game.GameType.SquirtyAllowed)
+            enabled = false;
+        else if (classification == InanimateObject.Classification.Smashy && !GameManager.Instance.Game.GameType.FloppyAllowed)
+            enabled = false;
+        return enabled;
+    } 
+    #endregion
 
-
-    public void SetCameraAttributes(bool attached)
-    {
-        if (!attached)
-        {
-            _screenShakes.Clear();
-            TurningScale = 1;
-        }
-        if (_attached != attached)
-        {
-            _isolatorColorTime = 0;
-            SetAutoAttachDuration();
-        }
-
-        _attached = attached;
-        Zooming = false;
-        _sphereCollider.enabled = !attached;
-    }
-    /// <summary>
-    /// Defines the size and position of the camera's rect based on the quantity of local players.
-    /// </summary>
-    /// <param name="localPlayerCount"> The quantity of local players.</param>
-    /// <param name="index"> The index of the camera's player.</param>
-    public void AppropriateRect(int localPlayerCount, int index)
-    {
-        if (localPlayerCount == 1)
-            return;
-        // If the player count is two, set full width, half height, and stack vertically
-        // If the player count is three, set quarter size, if the index is less that two stack horizontally at the top of the screen
-        // and if the index is three center at the bottom
-        // If the player count is four, set quarter size, if the index is less than two stack horizontally at the top of the screen
-        // otherwise stack horizontally at the bottom of the screen
-        float x = 0;
-        float y = index < 2 ? 0.5f : 0;
-        if (localPlayerCount == 2)
-            y = index == 0 ? 0.5f : 0;
-        else if (localPlayerCount == 3)
-            x = index < 2 ? (index % 2 == 0 ? 0 : 0.5f) : 0.25f;
-        else
-            x = index % 2 == 0 ? 0 : 0.5f;
-        Camera.rect = new Rect(x, y, localPlayerCount == 2 ? 1 : 0.5f, 0.5f);
-        // Reduce field of view if the player count is two
-        DefaultFieldOfView -= localPlayerCount == 2 ? TwoByFovReduction : 0;
-        ZoomedFieldOfView -= localPlayerCount == 2 ? TwoByFovReduction : 0;
-        Camera.fieldOfView = DefaultFieldOfView;
-    }
-
-
+    #region Targeting
     public bool Target(float targetingRadius, float distance, out RaycastHit raycastHit, LayerMask ignoredLayers)
     {
         raycastHit = new RaycastHit();
@@ -494,7 +596,7 @@ public class CameraController : MonoBehaviour
         Vector2 screenCenter = (new Vector2(Camera.pixelRect.width, Camera.pixelRect.height) / 2) + Camera.pixelRect.position;
 
         // Create radius points
-        Vector2[] radiusPoints = CreateRegularPoly2D(8);
+        Vector2[] radiusPoints = ShapesHelper.CreateRegularPoly2D(8);
         Vector2[] relativeRadiusPoints = new Vector2[8];
         for (int i = 0; i < radiusPoints.Length; i++)
             relativeRadiusPoints[i] = screenCenter + radiusPoints[i] * targetingRadius;
@@ -611,7 +713,7 @@ public class CameraController : MonoBehaviour
     {
         if (vert0.z < 0 || vert1.z < 0 || vert2.z < 0)
             return false;
-        
+
         var s = vert0.y * vert2.x - vert0.x * vert2.y + (vert2.y - vert0.y) * point.x + (vert0.x - vert2.x) * point.y;
         var t = vert0.x * vert1.y - vert0.y * vert1.x + (vert0.y - vert1.y) * point.x + (vert1.x - vert0.x) * point.y;
 
@@ -642,83 +744,6 @@ public class CameraController : MonoBehaviour
         PointInTriangle(point, targetVerts[6], targetVerts[7], targetVerts[3]) ||
         PointInTriangle(point, targetVerts[3], targetVerts[2], targetVerts[6]);
     }
-
-    private static Vector2[] CreateRegularPoly2D(int sides)
-    {
-        // Returns a quantity of points around a circle at an equal distance from on another.
-        // If sides are less than 3, return one point
-        if (sides < 3)
-            return new Vector2[] { Vector2.zero };
-
-        if (_storedRegularPolys.ContainsKey(sides))
-            return _storedRegularPolys[sides];
-
-        // The collection of points to be defined and returned
-        Vector2[] points = new Vector2[sides];
-
-        // Find each point evenly around a circle
-        float thetaDelta = (2f * Mathf.PI) * (1f / sides);
-        for (int pointStep = 0; pointStep < sides; pointStep++)
-        {
-            float iteration = thetaDelta * pointStep;
-            Vector3 point = Vector2.zero;
-            point.x = Mathf.Cos(iteration);
-            point.y = Mathf.Sin(iteration);
-
-            points[pointStep] = point;
-        }
-        _storedRegularPolys.Add(sides, points);
-        return points;
-    }
-
-    private int GetRandomDirection()
-    {
-        int direction = Random.Range(0, 2);
-        return direction == 0 ? -1 : 1;
-    }
-
-
-    private static float ClampAngle(float angle, Vector2 minMax)
-    {
-        // Clamps and angle between a minimum and maximum angle.
-        // Make our range between [0-360]
-        angle = (360 + (angle % 360)) % 360;
-        minMax.x = (360 + (minMax.x % 360)) % 360;
-        minMax.y = (360 + (minMax.y % 360)) % 360;
-
-        // If min is less than max
-        if (minMax.x <= minMax.y)
-            Mathf.Clamp(angle, minMax.x, minMax.y);
-        else
-        {
-            // If in bounds, if not, return
-            if (angle >= 0 && angle <= minMax.y)
-                return angle;
-            else if (angle <= 360 && angle >= minMax.x)
-                return angle;
-            else
-            {
-                // Clamp to closest
-                if (Mathf.Abs(angle - minMax.y) < Mathf.Abs(angle - minMax.x))
-                    return minMax.y;
-                else
-                    return minMax.x;
-            }
-
-        }
-
-        return 0;
-    }
-
-    private void DrawTriangle(Vector3 vert0, Vector3 vert1, Vector3 vert2, Color color = new Color())
-    {
-        if (color == new Color())
-            color = Color.red;
-
-        Debug.DrawLine(vert0, vert1, color);
-        Debug.DrawLine(vert1, vert2, color);
-        Debug.DrawLine(vert2, vert0, color);
-
-    }
+    #endregion
     #endregion
 }

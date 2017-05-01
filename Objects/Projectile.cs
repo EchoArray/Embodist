@@ -4,19 +4,22 @@ using UnityEngine.Networking;
 
 public class Projectile : NetworkBehaviour
 {
-    // TODO: Add multiple barrel exit points (toaster)
-
     #region Values
+    /// <summary>
+    /// Defines the gamer id of the casting player.
+    /// </summary>
     [SyncVar]
     public int GamerId;
+    /// <summary>
+    /// Determines if the projectile was fired by the host.
+    /// </summary>
+    [SyncVar]
+    public bool Host = false;
 
     /// <summary>
     /// Defines the duration in-which the projectile is allowed to live.
     /// </summary>
     public float Lifespan;
-    
-    [SyncVar]
-    public bool Host = false;
 
     public enum VelocityType
     {
@@ -36,12 +39,17 @@ public class Projectile : NetworkBehaviour
     /// Determines if the projectile uses gravity.
     /// </summary>
     public bool UseGravity;
+    // Defines the rigid body component of the game object.
+    private Rigidbody _rigidBody;
 
     /// <summary>
     /// Defines half of the length of the projectiles collision.
     /// </summary>
     [Space(15)]
     public float CollisionLength;
+    /// <summary>
+    /// Defines the offset of the starting position of the projectiles.
+    /// </summary>
     public float CollisionForwardOffset;
     /// <summary>
     /// Defines the radius of the projectiles collision.
@@ -53,18 +61,9 @@ public class Projectile : NetworkBehaviour
     /// </summary>
     [Space(15)]
     public GameObject ImpactEffect;
-
-    // Defines the rigid body component of the game object.
-    private Rigidbody _rigidBody;
     #endregion
 
     #region Unity Functions
-    private void OnDrawGizmos()
-    {
-        Vector3 castPosition = this.transform.position + (this.transform.forward * CollisionForwardOffset);
-        Debug.DrawLine(castPosition, castPosition + (this.transform.forward * CollisionLength), Color.yellow);
-    }
-
     private void Awake()
     {
         Initialize();
@@ -74,30 +73,36 @@ public class Projectile : NetworkBehaviour
         if (hasAuthority || NetworkSessionManager.IsHost && Host)
             this.gameObject.SetActive(false);
     }
+
     private void Update()
     {
-        if (!this.gameObject.activeSelf)
-            return;
-
-        UpdateConstantVelocity();
+        UpdateVelocity();
         UpdateRotation();
         UpdateCollision();
+    }
+
+    private void OnDrawGizmos()
+    {
+        Vector3 castPosition = this.transform.position + (this.transform.forward * CollisionForwardOffset);
+        Debug.DrawLine(castPosition, castPosition + (this.transform.forward * CollisionLength), Color.yellow);
     }
     #endregion
 
     #region Functions
-    // Define defaults
     private void Initialize()
     {
         this.gameObject.transform.SetParent(Globals.Instance.Containers.Projectiles);
-        _rigidBody = this.GetComponent<Rigidbody>();
 
+        // Define rigid body and its defaults
+        _rigidBody = this.GetComponent<Rigidbody>();
         _rigidBody.useGravity = UseGravity;
         _rigidBody.velocity = this.transform.forward * Velocity;
         _rigidBody.mass = 0;
+
         Destroy(this.gameObject, Lifespan);
     }
-    public void SetDefaults(int gamerId, bool host = false)
+    
+    public void Cast(int gamerId, bool host = false)
     {
         GamerId = gamerId;
         Host = host;
@@ -108,31 +113,35 @@ public class Projectile : NetworkBehaviour
         if (CollisionLength <= 0)
             return;
 
+        // Cast a ray and sphere forward to determine if the projectile has hit another object
+
         RaycastHit raycastHit;
         Vector3 castPosition = this.transform.position + (this.transform.forward * CollisionForwardOffset);
 
-        bool hit = Physics.SphereCast(castPosition, CollisionRadius, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
+        bool hit = Physics.Raycast(castPosition, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
         if(!hit)
-            hit = Physics.Raycast(castPosition, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
+            Physics.SphereCast(castPosition, CollisionRadius, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
 
         if (hit)
         {
             InanimateObject colliderInanimateObject = raycastHit.collider.gameObject.GetComponent<InanimateObject>();
 
-            // Avoid collisions with casting player
+            // Avoid collision with casting player
             if (colliderInanimateObject != null && colliderInanimateObject.GamerId == GamerId)
                 return;
 
             Impact(raycastHit);
         }
     }
-    private void UpdateConstantVelocity()
+    private void UpdateVelocity()
     {
+        // If constant velocity is active, always add velocity
         if (VelocityApplication == VelocityType.Constant)
             _rigidBody.velocity = this.transform.forward * Velocity;
     }
     private void UpdateRotation()
     {
+        // Rotate the projectile toward its velocity
         _rigidBody.MoveRotation(Quaternion.LookRotation(_rigidBody.velocity.normalized));
     }
     
@@ -140,36 +149,43 @@ public class Projectile : NetworkBehaviour
     {
         if (ImpactEffect != null)
         {
+            // Determine the rotation of the effect
             Quaternion rotation = raycastHit.normal != Vector3.zero ? Quaternion.LookRotation(raycastHit.normal) : Quaternion.identity;
-
+            // Create the effect
             GameObject impactEffect = Instantiate(ImpactEffect, raycastHit.point, rotation);
-
             EffectUtility effectUtility = impactEffect.GetComponent<EffectUtility>();
 
-            Color surfaceColor = Color.white;
-            bool hitUnlit = false;
-            switch (raycastHit.collider.gameObject.layer)
+            // If the effect uses lightmap coloration, attempt to get a color
+            if (effectUtility.UseLightmapColoration)
             {
-                default:
-                    hitUnlit = true;
-                    break;
-                case Globals.INANIMATE_OBJECT_LAYER:
-                    surfaceColor = raycastHit.collider.gameObject.GetComponent<InanimateObject>().LightmapColor;
-                    break;
-                case Globals.SCENERY_LAYER:
-                    surfaceColor = raycastHit.collider.gameObject.GetComponent<Scenery>().LightmapColor;
-                    break;
+                // Determine if there is a lightmap color on the impacted object, if not let the effect get the color on its own
+                bool hitUnlit = false;
+                Color lightmapColor = Color.white;
+                // If the projectile hit a scenery or inanimate object, get its lightmap color
+                switch (raycastHit.collider.gameObject.layer)
+                {
+                    default:
+                        hitUnlit = true;
+                        break;
+                    case Globals.INANIMATE_OBJECT_LAYER:
+                        lightmapColor = raycastHit.collider.gameObject.GetComponent<InanimateObject>().LightmapColor;
+                        break;
+                    case Globals.SCENERY_LAYER:
+                        lightmapColor = raycastHit.collider.gameObject.GetComponent<Scenery>().LightmapColor;
+                        break;
+                }
+                if (hitUnlit)
+                    effectUtility.Cast(raycastHit.collider.gameObject, GamerId);
+                else
+                    effectUtility.Cast(lightmapColor, raycastHit.collider.gameObject, GamerId);
             }
-            if(hitUnlit)
-                effectUtility.Cast(raycastHit.collider.gameObject, GamerId);
             else
-                effectUtility.Cast(surfaceColor, raycastHit.collider.gameObject, GamerId);
+                effectUtility.Cast(raycastHit.collider.gameObject, GamerId);
 
         }
 
         Destroy(this.gameObject);
-
-
+        
         if (NetworkSessionManager.IsClient && hasAuthority)
             NetworkSessionNode.Instance.CmdDestroy(this.gameObject);
     }

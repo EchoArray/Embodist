@@ -11,7 +11,9 @@ public class MenuStat : MonoBehaviour
     public Text Deaths;
     public Text KillToDeath;
 
+    [HideInInspector]
     public GameManager.GameAspects.Profile Profile;
+    [HideInInspector]
     public GameManager.GameAspects.Team Team;
 
     private RectTransform _rectTransform;
@@ -26,7 +28,7 @@ public class MenuStat : MonoBehaviour
         Profile = profile;
 
         // Set the color of the stat
-        Image playerStatImage = this.gameObject.GetComponent<Image>();
+        MaskableGraphic playerStatImage = this.gameObject.GetComponent<MaskableGraphic>();
         if (GameManager.Instance.Game.GameType.TeamGame)
             playerStatImage.color = GameManager.Instance.Game.Teams[profile.TeamId].Color;
         else
@@ -48,12 +50,20 @@ public class MenuStat : MonoBehaviour
     {
         Team = team;
 
-        Image playerStatImage = this.gameObject.GetComponent<Image>();
+        MaskableGraphic teamStatImage = this.gameObject.GetComponent<MaskableGraphic>();
         if (GameManager.Instance.Game.GameType.TeamGame)
-            playerStatImage.color = team.Color;
-
-        Name.text = team.Name;
-        Score.text = team.Score.ToString();
+            teamStatImage.color = team.Color;
+        
+        if (Name != null)
+            Name.text = team.Name;
+        if (Score != null)
+            Score.text = team.Score.ToString();
+        if (Kills != null)
+            Kills.text = team.Kills.ToString();
+        if (Deaths != null)
+            Deaths.text = team.Deaths.ToString();
+        if (KillToDeath != null)
+            KillToDeath.text = team.KillDeath > 0 ? "+" + team.KillDeath : team.KillDeath.ToString();
     }
 
     public void SetPosition(Vector2 position)

@@ -369,7 +369,7 @@ public class NetworkSessionNode : NetworkBehaviour
             inanimateObject.NetworkTransform.sendInterval = 0.03243f;
             inanimateObject.NetworkTransform.interpolateMovement = 1;
 
-            inanimateObject.RpcSetControlled(gamerId, teamId);
+            inanimateObject.RpcSelected(gamerId, teamId);
             networkIdentity.AssignClientAuthority(connectionToClient);
         }
         TargetAttachmentResponse(connectionToClient, localPlayerId, networkIdentity, allow);
@@ -380,7 +380,7 @@ public class NetworkSessionNode : NetworkBehaviour
     {
         GameManager.GameAspects.Profile profile = GameManager.Instance.Game.Profiles.Find(p => p.ControllerId == controlledId);
         if (allow)
-            profile.LocalPlayer.ForceAttach(networkIdentity.gameObject.GetComponent<InanimateObject>());
+            profile.LocalPlayer.ForceAttachTo(networkIdentity.gameObject.GetComponent<InanimateObject>());
         profile.LocalPlayer.CameraController.AwaitingAttachment = false;
     }
 
@@ -433,7 +433,7 @@ public class NetworkSessionNode : NetworkBehaviour
     {
         GameObject gameObject = Instantiate(NetworkSessionManager.singleton.spawnPrefabs[index], position, rotation);
         Projectile projectile = gameObject.GetComponent<Projectile>();
-        projectile.SetDefaults(gamerId, host);
+        projectile.Cast(gamerId, host);
 
         NetworkServer.SpawnWithClientAuthority(gameObject, connectionToClient);
     }
@@ -530,9 +530,7 @@ public class NetworkSessionNode : NetworkBehaviour
             return;
 
         if (profile.Local)
-        {
-            profile.LocalPlayer.ReceiveEmoji(type, fromName);
-        }
+            profile.LocalPlayer.ShowEmoji(type, fromName);
         else
         {
             NetworkConnection targetNetworkConnection = NetworkSessionManager.Instance.GetConnectionById(profile.ConnectionId);
@@ -545,7 +543,7 @@ public class NetworkSessionNode : NetworkBehaviour
         GameManager.GameAspects.Profile profile = GameManager.Instance.GetProfileByGamerId(gamerId);
         if (profile == null)
             return;
-        profile.LocalPlayer.ReceiveEmoji(type, fromName);
+        profile.LocalPlayer.ShowEmoji(type, fromName);
     }
     #endregion
 }

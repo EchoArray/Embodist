@@ -97,16 +97,16 @@ public class NetworkSessionManager : NetworkManager
         GameManager.Instance.RemoveAllProfilesForConnection(conn.connectionId);
         NetworkSessionNode.Instance.RpcPeerDisconnected(conn.connectionId);
 
-        if (GameManager.Instance.Game.Playing && !GameManager.Instance.AllProfilesOpposing())
-        {
+        if (GameManager.Instance.Game.Playing && !GameManager.Instance.ProfilesOpposing())
             GameManager.Instance.EndGame();
-        }
     }
 
     public override void OnStopHost()
     {
         base.OnStopHost();
         GameManager.Instance.RemoveAllNonLocalProfiles();
+        if (GameManager.Instance.Game.Playing && !GameManager.Instance.ProfilesOpposing())
+            GameManager.Instance.EndGame();
     }
 
     public override void OnClientConnect(NetworkConnection conn)
@@ -147,7 +147,6 @@ public class NetworkSessionManager : NetworkManager
 
     public override void ServerChangeScene(string newSceneName)
     {
-
         base.ServerChangeScene(newSceneName);
     }
 
@@ -162,14 +161,6 @@ public class NetworkSessionManager : NetworkManager
             if (networkConnection.connectionId == connectionId)
                 return networkConnection;
 
-        return null;
-    }
-    public NetworkSessionNode GetNodeByConnection(NetworkConnection conn)
-    {
-        NetworkSessionNode[] nodes = FindObjectsOfType<NetworkSessionNode>();
-        foreach (NetworkSessionNode node in nodes)
-            if (node.connectionToClient == conn)
-                return node;
         return null;
     }
 }

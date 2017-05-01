@@ -325,6 +325,16 @@ public class GameManager : MonoBehaviour
             /// Defines the active kills for the team
             /// </summary>
             public int Kills;
+            /// <summary>
+            /// Defines the active kills for the team
+            /// </summary>
+            public int Deaths;
+
+            public int KillDeath
+            {
+                get { return Kills - Deaths; }
+            }
+
         }
         public List<Team> Teams;
     }
@@ -380,9 +390,6 @@ public class GameManager : MonoBehaviour
     [MethodReference("start_game")]
     public void StartGame()
     {
-        NetworkManagerHUD networkManagerHUD = FindObjectOfType<NetworkManagerHUD>();
-        networkManagerHUD.showGUI = false;
-
         SceneManager.LoadScene(Game.SelectedMapName);
         if (NetworkSessionManager.IsHost)
             NetworkSessionManager.singleton.ServerChangeScene(Game.SelectedMapName);
@@ -406,7 +413,7 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(3);
         NetworkSessionManager.networkSceneName = string.Empty;
         SceneManager.LoadScene("title");
-        GamePadManager.ClearAllVibrations();
+        XboxInputManager.ClearAllVibrations();
     }
 
     [MethodReference("register_local_player")]
@@ -542,11 +549,9 @@ public class GameManager : MonoBehaviour
                 return false;
         return true;
     }
-    public bool AllProfilesOpposing()
+    public bool ProfilesOpposing()
     {
-        if (Game.Profiles.Count <= 1)
-            return false;
-        else if (!Game.GameType.TeamGame)
+        if (!Game.GameType.TeamGame || Game.Profiles.Count <= 1)
             return true;
         else
         {
@@ -632,7 +637,7 @@ public class GameManager : MonoBehaviour
 
     public bool CheckTieGame()
     {
-        if (!AllProfilesOpposing())
+        if (!ProfilesOpposing())
         {
             return false;
         }
@@ -663,7 +668,7 @@ public class GameManager : MonoBehaviour
     public GameAspects.Team GetWinningTeam()
     {
         GameAspects.Team winningTeam = Game.Teams[0];
-        if (!AllProfilesOpposing())
+        if (!ProfilesOpposing())
             return Game.Teams[Game.Profiles[0].TeamId];
 
         foreach (GameAspects.Team team in Game.Teams)
@@ -806,6 +811,8 @@ public class GameManager : MonoBehaviour
         GameAspects.Profile profile = GetProfileByGamerId(gamerId);
         profile.Kills += 1;
 
+        if (Game.GameType.TeamGame)
+            Game.Teams[profile.TeamId].Kills += 1;
 
         if ((!fromNetwork || NetworkSessionManager.IsHost) && GameManager.Instance.Game.GameType.KillBased)
             AddProfileScore(gamerId, fromNetwork);
@@ -831,6 +838,8 @@ public class GameManager : MonoBehaviour
         GameAspects.Profile profile = GetProfileByGamerId(gamerId);
         profile.Deaths += 1;
 
+        if (Game.GameType.TeamGame)
+            Game.Teams[profile.TeamId].Deaths += 1;
     }
     public void AddProfileScore(int gamerId, bool fromNetwork = false)
     {

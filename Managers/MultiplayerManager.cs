@@ -66,12 +66,14 @@ public class MultiplayerManager : MonoBehaviour
         int[] localProfileIndexs = GameManager.Instance.GetLocalProfileIndexes();
         HUDManager.Instance.ShowScreenSplitters(localProfileIndexs.Length);
         InstantiateLocalPlayers(localProfileIndexs);
-
+        
         GameManager.Instance.Game.Playing = true;
         GameManager.Instance.Game.GameType.TimeLimitRemaining = GameManager.Instance.GetTimeLimit();
 
         Globals.Instance.Containers.AreaIsolators.gameObject.SetActive(GameManager.Instance.Game.GameType.IsolateAreas);
         HotLava.SetActive(GameManager.Instance.Game.GameType.HotLava);
+
+
     }
 
     private void InstantiateLocalPlayers(int[] localProfilesIndexs)

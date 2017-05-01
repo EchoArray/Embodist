@@ -6,7 +6,6 @@ using UnityEngine.Networking;
 public class Powerup : NetworkBehaviour
 {
     #region Values
-
     public enum PowerupType
     {
         Switch,
