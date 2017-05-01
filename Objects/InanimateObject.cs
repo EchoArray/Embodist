@@ -348,7 +348,7 @@ public class InanimateObject :  NetworkBehaviour
     private void Initialize()
     {
         // Defines various defaults within the inanimate object.
-        this.transform.SetParent(Globals.Instance.Containers.Objects);
+        this.transform.SetParent(Globals.Instance.Containers.InanimateObjects);
 
         _renderer = this.gameObject.GetComponent<Renderer>();
         _material = new Material(_renderer.material);

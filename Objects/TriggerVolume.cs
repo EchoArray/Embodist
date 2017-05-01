@@ -233,9 +233,9 @@ public class TriggerVolume : MonoBehaviour
     /// <param name="destinationVolume"></param>
     public void TeleportGameObject(GameObject gameObject, TriggerVolume destinationVolume)
     {
+        destinationVolume.TeleportationEnterIgnore = gameObject;
         Vector3 offset = gameObject.transform.position - this.transform.position;
         gameObject.transform.position = destinationVolume.transform.position + offset;
-        destinationVolume.TeleportationEnterIgnore = gameObject;
     }
 
     /// <summary>

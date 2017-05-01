@@ -122,12 +122,14 @@ public class CameraEffect : MonoBehaviour
     public void Cast()
     {
         Development.AddTimedSphereGizmo(Color.cyan, Effect.Properties.Radius, this.transform.position, Mathf.Max(1, Effect.Properties.Duration));
+        if (Globals.Instance == null || Globals.Instance.Containers.InanimateObjects == null)
+            return;
 
         // Loop through to each inanimate object
-        for (int i = 0; i < Globals.Instance.Containers.Objects.childCount; i++)
+        for (int i = 0; i < Globals.Instance.Containers.InanimateObjects.childCount; i++)
         {
             // If the inanimate object is within the radius apply effects
-            Transform inanimateObjectTransform = Globals.Instance.Containers.Objects.GetChild(i);
+            Transform inanimateObjectTransform = Globals.Instance.Containers.InanimateObjects.GetChild(i);
             float distance = Vector3.Distance(this.transform.position, inanimateObjectTransform.position);
             if (distance <= Effect.Properties.Radius)
             {

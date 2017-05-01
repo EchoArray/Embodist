@@ -56,9 +56,12 @@ public class CameraController : MonoBehaviour
     [Space(5)]
     public float RotationRate;
 
+    /// <summary>
+    /// Defines the duration in-which the camera will auto attach to an inanaimate object.
+    /// </summary>
     [ValueReference("auto_spawn_duration")]
     [HideInInspector]
-    public float AutoSpawnDuration;
+    public float AutoAttachDurationRemaining;
 
     /// <summary>
     /// Defines the radius in-which the camera is allowed to select a prospect inanimate object.
@@ -110,7 +113,6 @@ public class CameraController : MonoBehaviour
     /// <summary>
     /// Defines the constraints of the camera controllers rotation along the X axis while attached.
     /// </summary>
-
     [Header("Attached")]
     public Vector2 AttachedOrbitPitchRange;
 
@@ -563,15 +565,15 @@ public class CameraController : MonoBehaviour
 
         if (!_attached)
         {
-            if (AutoSpawnDuration > 0)
-                AutoSpawnDuration -= Time.deltaTime;
+            if (AutoAttachDurationRemaining > 0)
+                AutoAttachDurationRemaining -= Time.deltaTime;
             else
                 AutoAttach();
         }
     }
     private void SetAutoAttachDuration()
     {
-        AutoSpawnDuration = GameManager.Instance.Game.GameType.AutoAttachDuration;
+        AutoAttachDurationRemaining = GameManager.Instance.Game.GameType.AutoAttachDuration;
     }
 
     private bool IsClassEnabled(InanimateObject.Classification classification)
