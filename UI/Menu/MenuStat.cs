@@ -5,6 +5,8 @@ using UnityEngine.UI;
 
 public class MenuStat : MonoBehaviour
 {
+    public float ColorAlpha = 1;
+
     public Text Name;
     public Text Score;
     public Text Kills;
@@ -29,10 +31,19 @@ public class MenuStat : MonoBehaviour
 
         // Set the color of the stat
         MaskableGraphic playerStatImage = this.gameObject.GetComponent<MaskableGraphic>();
+
         if (GameManager.Instance.Game.GameType.TeamGame)
-            playerStatImage.color = GameManager.Instance.Game.Teams[profile.TeamId].Color;
+        {
+            Color color = GameManager.Instance.Game.Teams[profile.TeamId].Color;
+            color.a = ColorAlpha;
+            playerStatImage.color = color;
+        }
         else
-            playerStatImage.color = GameManager.Instance.PlayerColor;
+        {
+            Color color = GameManager.Instance.PlayerColor;
+            color.a = ColorAlpha;
+            playerStatImage.color = color;
+        }
 
         // Set the details of the stat
         if (Name != null)
@@ -52,7 +63,11 @@ public class MenuStat : MonoBehaviour
 
         MaskableGraphic teamStatImage = this.gameObject.GetComponent<MaskableGraphic>();
         if (GameManager.Instance.Game.GameType.TeamGame)
-            teamStatImage.color = team.Color;
+        {
+            Color color = team.Color;
+            color.a = ColorAlpha;
+            teamStatImage.color = color;
+        }
         
         if (Name != null)
             Name.text = team.Name;

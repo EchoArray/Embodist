@@ -59,7 +59,12 @@ public class Weapon : NetworkBehaviour
     [ValueReference("heat")]
     public float Heat;
     // Determines if heat cooling will be skipped along the next frame.
-    private bool _skipHeatCooling; 
+    private bool _skipHeatCooling;
+
+    // Determines if the projectile is allowed to be instantiated along the aiming direction.
+    private bool _allowProjectileDirection;
+    // Defines the aiming direciton of the caster.
+    private Vector3 _casterAimingDirection;
     #endregion
 
     #region Unity Functions
@@ -75,6 +80,17 @@ public class Weapon : NetworkBehaviour
         GamerId = gamerId;
     }
 
+    /// <summary>
+    /// Defines the aiming state, and aiming direction of the caster.
+    /// </summary>
+    /// <param name="allowProjectileDirection"></param>
+    /// <param name="aimingDirection"></param>
+    public void SetAiming(bool allowProjectileDirection, Vector3 aimingDirection)
+    {
+        _allowProjectileDirection = allowProjectileDirection;
+        _casterAimingDirection = aimingDirection;
+    }
+
     private void UpdateCooling()
     {
         if (!_skipHeatCooling)
@@ -82,7 +98,7 @@ public class Weapon : NetworkBehaviour
         else
             _skipHeatCooling = false;
 
-        if (OverHeated && Heat <= 50f)
+        if (OverHeated && Heat <= Globals.Instance.WeaponDefaults.CooledHeatLevel)
         {
             OverHeated = false;
             GameManager.Instance.GetProfileByGamerId(GamerId).LocalPlayer.HeadsUpDisplay.AddEvent("attached_weapon_heat_cooled");
@@ -94,10 +110,7 @@ public class Weapon : NetworkBehaviour
         // If the weapon is still recovering from the last shot or the weapon is overheated, abort
         if (Time.time < _shotRecoveredTime || OverHeated)
             return;
-        Eject();
-    }
-    private void Eject()
-    {
+
         if (FirePhysicalEffect != null)
             FirePhysicalEffect.Cast(GamerId);
 
@@ -105,19 +118,25 @@ public class Weapon : NetworkBehaviour
         _shotRecoveredTime = Time.time + ShotRecoveryDuration;
 
         // Add to heat, stop heat from cooling next frame
-        Heat = Mathf.Min(Heat + (HeatRate * Time.deltaTime), 100);
+        Heat = Mathf.Min(Heat + (HeatRate * Time.deltaTime), Globals.Instance.WeaponDefaults.OverheatLevel);
         _skipHeatCooling = true;
 
         // If the heat is equal to one hundred overheat the weapon
-        if (Heat == 100)
+        if (Heat == Globals.Instance.WeaponDefaults.OverheatLevel)
         {
             OverHeated = true;
             GameManager.Instance.GetProfileByGamerId(GamerId).LocalPlayer.HeadsUpDisplay.AddEvent("attached_weapon_overheated");
         }
 
+        Eject();
+    }
+    private void Eject()
+    {
+        // Determine the rotation of the projectile
+        Quaternion rotation = _allowProjectileDirection ? Quaternion.LookRotation(_casterAimingDirection) : this.transform.rotation;
+        rotation *= Quaternion.Euler(Random.Range(-Spread, Spread), Random.Range(-Spread, Spread), 0);
+
         // Instantiate new projectile, define projectiles caster
-        Quaternion rotation = this.transform.rotation * Quaternion.Euler(Random.Range(-Spread, Spread), Random.Range(-Spread, Spread), 0);
-        
         GameObject newProjectile = Instantiate(Projectile, this.transform.position, rotation);
         Projectile projectile = newProjectile.GetComponent<Projectile>();
         projectile.Cast(GamerId);

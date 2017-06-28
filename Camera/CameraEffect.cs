@@ -9,15 +9,18 @@ public class CameraEffect : MonoBehaviour
     {
         OnAwake,
         Internal,
+        Trigger,
     }
     /// <summary>
-    /// Determines when to cast the effect utility.
+    /// Determines when to cast the damage effect.
     /// </summary>
     public ExecutionType Type;
 
     [Serializable]
     public class EffectSettings
     {
+        public int UniqueID;
+
         [Serializable]
         public class PropertySettings
         {
@@ -88,6 +91,7 @@ public class CameraEffect : MonoBehaviour
             public ColorSettings() { }
             public ColorSettings(ColorSettings effectSettings)
             {
+                
                 Brightness = effectSettings.Brightness;
                 Saturation = effectSettings.Saturation;
                 Contrast = effectSettings.Contrast;
@@ -103,6 +107,7 @@ public class CameraEffect : MonoBehaviour
         public EffectSettings() { }
         public EffectSettings(EffectSettings cameraEffect)
         {
+            UniqueID = cameraEffect.UniqueID;
             Properties = cameraEffect.Properties;
             Colors = cameraEffect.Colors;
         }
@@ -121,28 +126,30 @@ public class CameraEffect : MonoBehaviour
     #region Functions
     public void Cast()
     {
-        Development.AddTimedSphereGizmo(Color.cyan, Effect.Properties.Radius, this.transform.position, Mathf.Max(1, Effect.Properties.Duration));
-        if (Globals.Instance == null || Globals.Instance.Containers.InanimateObjects == null)
-            return;
-
         // Loop through to each inanimate object
         for (int i = 0; i < Globals.Instance.Containers.InanimateObjects.childCount; i++)
         {
             // If the inanimate object is within the radius apply effects
-            Transform inanimateObjectTransform = Globals.Instance.Containers.InanimateObjects.GetChild(i);
-            float distance = Vector3.Distance(this.transform.position, inanimateObjectTransform.position);
+            Transform transform = Globals.Instance.Containers.InanimateObjects.GetChild(i);
+            float distance = Vector3.Distance(this.transform.position, transform.position);
             if (distance <= Effect.Properties.Radius)
             {
-                InanimateObject inanaimateObject = inanimateObjectTransform.GetComponent<InanimateObject>();
-                if (inanaimateObject != null && inanaimateObject.Controlled && inanaimateObject.LocalPlayer != null)
-                {
-                    CameraEffector cameraEffector = inanaimateObject.LocalPlayer.CameraController.GetComponent<CameraEffector>();
-                    cameraEffector.AddEffect(Effect);
-                }
+                InanimateObject inanimateObject = transform.GetComponent<InanimateObject>();
+                if (inanimateObject != null)
+                    Apply(inanimateObject);
             }
         }
 
         Destroy(this.gameObject);
+    }
+
+    public void Apply(InanimateObject inanimateObject)
+    {
+        if (inanimateObject.LocalPlayer != null)
+        {
+            CameraEffector cameraEffector = inanimateObject.LocalPlayer.CameraController.GetComponent<CameraEffector>();
+            cameraEffector.AddEffect(Effect);
+        }
     }
     #endregion
 

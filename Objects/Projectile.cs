@@ -14,7 +14,7 @@ public class Projectile : NetworkBehaviour
     /// Determines if the projectile was fired by the host.
     /// </summary>
     [SyncVar]
-    public bool Host = false;
+    public bool Host;
 
     /// <summary>
     /// Defines the duration in-which the projectile is allowed to live.
@@ -119,19 +119,14 @@ public class Projectile : NetworkBehaviour
         Vector3 castPosition = this.transform.position + (this.transform.forward * CollisionForwardOffset);
 
         bool hit = Physics.Raycast(castPosition, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
-        if(!hit)
-            Physics.SphereCast(castPosition, CollisionRadius, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
+        if (!hit)
+        {
+            castPosition = this.transform.position + (this.transform.forward * (CollisionForwardOffset - CollisionRadius));
+            hit = Physics.SphereCast(castPosition, CollisionRadius, this.transform.forward, out raycastHit, CollisionLength, ~Globals.Instance.WeaponDefaults.ProjectileIgnoredLayers);
+        }
 
         if (hit)
-        {
-            InanimateObject colliderInanimateObject = raycastHit.collider.gameObject.GetComponent<InanimateObject>();
-
-            // Avoid collision with casting player
-            if (colliderInanimateObject != null && colliderInanimateObject.GamerId == GamerId)
-                return;
-
             Impact(raycastHit);
-        }
     }
     private void UpdateVelocity()
     {
@@ -165,7 +160,8 @@ public class Projectile : NetworkBehaviour
                 switch (raycastHit.collider.gameObject.layer)
                 {
                     default:
-                        hitUnlit = true;
+                        lightmapColor = LightmapHelper.GetColor(raycastHit);
+                        hitUnlit = lightmapColor == Color.white;
                         break;
                     case Globals.INANIMATE_OBJECT_LAYER:
                         lightmapColor = raycastHit.collider.gameObject.GetComponent<InanimateObject>().LightmapColor;
@@ -174,6 +170,8 @@ public class Projectile : NetworkBehaviour
                         lightmapColor = raycastHit.collider.gameObject.GetComponent<Scenery>().LightmapColor;
                         break;
                 }
+
+                // If the projectile hit an unlit object, leave it to the effect utility to define lightmap color, otherwise pass color with cast
                 if (hitUnlit)
                     effectUtility.Cast(raycastHit.collider.gameObject, GamerId);
                 else

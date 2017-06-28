@@ -119,12 +119,12 @@ public class TitleMenuManager : MonoBehaviour
     {
         float offset = 0;
 
-        for (int teamIndex = 0; teamIndex < GameManager.Instance.Game.Teams.Count; teamIndex++)
-            for (int profileIndex = 0; profileIndex < GameManager.Instance.Game.Profiles.Count; profileIndex++)
-                offset = RefreshPlayerUI(teamIndex, profileIndex, offset);
+        for (int i = 0; i < GameManager.Instance.Game.Teams.Count; i++)
+            for (int x = 0; x < GameManager.Instance.Game.Profiles.Count; x++)
+                offset = RefreshPlayerUI(i, x, offset);
 
-        for (int menuPlayerJoinIndex = 0; menuPlayerJoinIndex < _menuPlayerJoinObjects.Count; menuPlayerJoinIndex++)
-            offset = RefreshPlayerJoinUI(menuPlayerJoinIndex, offset);
+        for (int i = 0; i < _menuPlayerJoinObjects.Count; i++)
+            offset = RefreshPlayerJoinUI(i, offset);
     }
 
     public void AddAllPlayersUI()
@@ -142,7 +142,7 @@ public class TitleMenuManager : MonoBehaviour
     {
         if(profile.Local)
             _registeredPlayerCount -= 1;
-        Destroy(profile.UIElement);
+        Destroy(profile.MenuUIElement);
     }
 
     public void AddPlayerJoinUI()
@@ -158,14 +158,14 @@ public class TitleMenuManager : MonoBehaviour
         MenuProfile menuProfile = menuPlayerObject.GetComponent<MenuProfile>();
         menuProfile.SetName(profile.Name);
         menuPlayerObject.name = "ui_player_" + profile.Name;
-        profile.UIElement = menuPlayerObject;
+        profile.MenuUIElement = menuPlayerObject;
     }
 
     public float RefreshPlayerUI(int teamIndex, int profileIndex, float offset)
     {
         if (GameManager.Instance.Game.Profiles[profileIndex].TeamId == teamIndex)
         {
-            RectTransform rectTransform = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<RectTransform>();
+            RectTransform rectTransform = GameManager.Instance.Game.Profiles[profileIndex].MenuUIElement.GetComponent<RectTransform>();
 
             float halfWidth = rectTransform.sizeDelta.x / 2;
             Vector2 position = new Vector2(halfWidth + ((rectTransform.sizeDelta.x + MenuPlayerElementMargin) * profileIndex), 0);
@@ -177,7 +177,7 @@ public class TitleMenuManager : MonoBehaviour
 
             rectTransform.localScale = Vector3.one;
 
-            MaskableGraphic maskableGraphic = GameManager.Instance.Game.Profiles[profileIndex].UIElement.GetComponent<MaskableGraphic>();
+            MaskableGraphic maskableGraphic = GameManager.Instance.Game.Profiles[profileIndex].MenuUIElement.GetComponent<MaskableGraphic>();
             maskableGraphic.color = GameManager.Instance.Game.GameType.TeamGame ? GameManager.Instance.Game.Teams[GameManager.Instance.Game.Profiles[profileIndex].TeamId].Color :
                  GameManager.Instance.PlayerColor;
         }

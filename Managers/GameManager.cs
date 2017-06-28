@@ -15,24 +15,33 @@ public class GameManager : MonoBehaviour
     /// Determines if a game has been played since game load
     /// </summary>
     public static bool Dirty;
+    /// <summary>
+    /// Determines if local players are allowed to join the game.
+    /// </summary>
     public bool AllowLocalPlayerJoining = true;
+    /// <summary>
+    /// Defines the maximum quantity of players in a session.
+    /// </summary>
     public int MaxProfileCount = 8;
     [Serializable]
     public class GameAspects
     {
+        /// <summary>
+        /// Defines the selected map of the game.
+        /// </summary>
         [ValueReference("selected_map_name")]
         public string SelectedMapName = "house";
         /// <summary>
         /// Determines if the game is in play
         /// </summary>
         public bool Playing;
+        /// <summary>
+        /// Determies if local players are allowed to input.
+        /// </summary>
         public bool AllowInput;
         [Serializable]
         public class GameSettings
         {
-            /// <summary>
-            /// Determines which game mode is active.
-            /// </summary>
             public enum GameMode
             {
                 Goop,
@@ -41,14 +50,9 @@ public class GameManager : MonoBehaviour
                 Bomb
             }
 
-            public bool KillBased
-            {
-                get
-                {
-                    return Mode == GameMode.Goop;
-                }
-            }
-
+            /// <summary>
+            /// Determines which game mode is active.
+            /// </summary>
             [ValueReference("mode")]
             public GameMode Mode;
 
@@ -91,11 +95,19 @@ public class GameManager : MonoBehaviour
             /// </summary>
             [ValueReference("isolate_areas")]
             public bool IsolateAreas;
+            /// <summary>
+            /// Determines if inanaimate objects are allowed to jump off of walls.
+            /// </summary>
             [ValueReference("climb_walls")]
             public bool ClimbWalls = false;
+            /// <summary>
+            /// Determines the active state of the hot lava objects container.
+            /// </summary>
             [ValueReference("hot_lava")]
             public bool HotLava = false;
-
+            /// <summary>
+            /// Determines if all inanaimate objects in the game are to be spawned as bottles of ketchup.
+            /// </summary>
             [ValueReference("ketchup_only")]
             public bool KetchupOnly = false;
 
@@ -138,7 +150,21 @@ public class GameManager : MonoBehaviour
             [ValueReference("time_limit_remaining")]
             public float TimeLimitRemaining;
 
-            public float AutoAttachDuration = 20f;
+            /// <summary>
+            /// Determines if the game is kill based.
+            /// </summary>
+            public bool KillBased
+            {
+                get
+                {
+                    return Mode == GameMode.Goop;
+                }
+            }
+
+            /// <summary>
+            /// Defines the duration in-which when ended a player will be forced to attach to an inaninamte object.
+            /// </summary>
+            public float AutoAttachDuration = 15f;
 
             /// <summary>
             /// Defines the time in which it takes to re-spawn.
@@ -236,15 +262,13 @@ public class GameManager : MonoBehaviour
             /// </summary>
             public int Score;
 
+            /// <summary>
+            /// Defines the kill death amount of the profiles kills.
+            /// </summary>
             [ValueReference("kill_death")]
             public int KillDeath
             {
                 get { return Kills - Deaths; }
-            }
-
-            public int TeamKills
-            {
-                get { return Instance.Game.Teams[TeamId].Kills; }
             }
 
             [ValueReference("active_score")]
@@ -290,7 +314,7 @@ public class GameManager : MonoBehaviour
             /// Defines the menu UI element associated with the profile
             /// </summary>
             [Space(15)]
-            public GameObject UIElement;
+            public GameObject MenuUIElement;
 
             public Profile(string name, bool local, int gamerID, int controllerID, int teamID, int connectionId, int lookSensitivity, bool lookInverted, bool controllerVibration)
             {
@@ -312,6 +336,9 @@ public class GameManager : MonoBehaviour
         [Serializable]
         public class Team
         {
+            /// <summary>
+            /// Defines the color of the team.
+            /// </summary>
             public Color Color;
             /// <summary>
             /// Defines the name of the team
@@ -329,7 +356,9 @@ public class GameManager : MonoBehaviour
             /// Defines the active kills for the team
             /// </summary>
             public int Deaths;
-
+            /// <summary>
+            /// Defines the kill to death amout of the team.
+            /// </summary>
             public int KillDeath
             {
                 get { return Kills - Deaths; }
@@ -340,7 +369,9 @@ public class GameManager : MonoBehaviour
     }
     [ValueReference("game")]
     public GameAspects Game;
-
+    /// <summary>
+    /// Defines the color of players if they are not on a team.
+    /// </summary>
     public Color PlayerColor;
 
     // A collection of various names used for new profiles
@@ -367,18 +398,15 @@ public class GameManager : MonoBehaviour
     #region Functions
     private void Initialize()
     {
-        Application.runInBackground = true;
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this.gameObject);
+            return;
+        }
 
+        Application.runInBackground = true;
         SceneManager.sceneLoaded += OnSceneLoaded;
 
-        // If there is an existing game manager; kill this one
-        GameManager[] titleToGames = FindObjectsOfType<GameManager>();
-        foreach (GameManager titleToGame in titleToGames)
-            if (titleToGame != this)
-            {
-                Destroy(this.gameObject);
-                return;
-            }
 
         // Define instance
         Instance = this;
@@ -408,12 +436,373 @@ public class GameManager : MonoBehaviour
 
         StartCoroutine(WaitToReturnToMenu());
     }
+    [MethodReference("leave_game")]
+    public void LeaveGame()
+    {
+        if (!GameManager.Instance.Game.Playing)
+            return;
+
+        Game.Playing = false;
+
+        if (NetworkSessionManager.IsHost)
+            NetworkSessionNode.Instance.RpcEndGameForClients();
+
+        StartCoroutine(WaitToReturnToMenu());
+    }
+
     private IEnumerator WaitToReturnToMenu()
     {
         yield return new WaitForSeconds(3);
         NetworkSessionManager.networkSceneName = string.Empty;
         SceneManager.LoadScene("title");
         XboxInputManager.ClearAllVibrations();
+    }
+
+
+    private void ResetStatistics()
+    {
+        // Reset the values for all teams and players
+        foreach (GameAspects.Team team in Game.Teams)
+        {
+            team.Score = 0;
+            team.Kills = 0;
+        }
+        foreach (GameAspects.Profile profile in Game.Profiles)
+        {
+            profile.Score = 0;
+            profile.Kills = 0;
+            profile.Deaths = 0;
+        }
+    }
+
+    public int GetScoreToWin()
+    {
+        switch (Game.GameType.ScoreToWin)
+        {
+            case GameAspects.GameSettings.Score.Unlimited:
+                return 0;
+            case GameAspects.GameSettings.Score.One:
+                return 1;
+            case GameAspects.GameSettings.Score.Two:
+                return 2;
+            case GameAspects.GameSettings.Score.Three:
+                return 3;
+            case GameAspects.GameSettings.Score.Five:
+                return 5;
+            case GameAspects.GameSettings.Score.Ten:
+                return 10;
+            case GameAspects.GameSettings.Score.Fifteen:
+                return 15;
+            case GameAspects.GameSettings.Score.Twenty:
+                return 20;
+            case GameAspects.GameSettings.Score.TwentyFive:
+                return 25;
+            case GameAspects.GameSettings.Score.Fifty:
+                return 50;
+            case GameAspects.GameSettings.Score.OneHundred:
+                return 100;
+            case GameAspects.GameSettings.Score.TwoHundred:
+                return 200;
+            case GameAspects.GameSettings.Score.ThreeHundred:
+                return 300;
+            case GameAspects.GameSettings.Score.FiveHundred:
+                return 500;
+            case GameAspects.GameSettings.Score.OneThousand:
+                return 1000;
+            case GameAspects.GameSettings.Score.TwoThousand:
+                return 2000;
+            case GameAspects.GameSettings.Score.ThreeThousand:
+                return 3000;
+            case GameAspects.GameSettings.Score.FiveThousand:
+                return 5000;
+        }
+        return 0;
+    }
+    public int GetTimeLimit()
+    {
+        switch (Game.GameType.TimeLimit)
+        {
+            case GameAspects.GameSettings.Duration.Unlimited:
+                return 0;
+            case GameAspects.GameSettings.Duration.OneMinute:
+                return 60;
+            case GameAspects.GameSettings.Duration.TwoMinutes:
+                return 120;
+            case GameAspects.GameSettings.Duration.ThreeMinutes:
+                return 180;
+            case GameAspects.GameSettings.Duration.FiveMinutes:
+                return 300;
+            case GameAspects.GameSettings.Duration.TenMinutes:
+                return 600;
+            case GameAspects.GameSettings.Duration.FifteenMinutes:
+                return 900;
+            case GameAspects.GameSettings.Duration.ThirtyMinutes:
+                return 1800;
+            case GameAspects.GameSettings.Duration.OneHour:
+                return 3600;
+        }
+        return 0;
+    }
+
+    public bool CheckTieGame()
+    {
+        if (!IsVersus())
+        {
+            return false;
+        }
+        else if (Game.GameType.TeamGame)
+        {
+            GameAspects.Team winningTeam = GetWinningTeam();
+            foreach (GameAspects.Team team in Game.Teams)
+            {
+                if (team == winningTeam)
+                    continue;
+                if (team.Score == winningTeam.Score)
+                    return true;
+            }
+        }
+        else
+        {
+            GameAspects.Profile winnningProfile = GetWinningProfile();
+            foreach (GameAspects.Profile profile in Game.Profiles)
+            {
+                if (profile == winnningProfile)
+                    continue;
+                if (profile.Score == winnningProfile.Score)
+                    return true;
+            }
+        }
+        return false;
+    }
+    public GameAspects.Team GetWinningTeam()
+    {
+        GameAspects.Team winningTeam = Game.Teams[0];
+        if (!IsVersus())
+            return Game.Teams[Game.Profiles[0].TeamId];
+
+        foreach (GameAspects.Team team in Game.Teams)
+            if (team.Score > winningTeam.Score)
+                winningTeam = team;
+
+        return winningTeam;
+    }
+    public GameAspects.Profile GetWinningProfile()
+    {
+        GameAspects.Profile winningProfile = Game.Profiles[0];
+
+        foreach (GameAspects.Profile profile in Game.Profiles)
+            if (profile.Score > winningProfile.Score)
+                winningProfile = profile;
+
+        return winningProfile;
+    }
+
+    public static float GetLookSensitivity(GameAspects.Profile.Sensitivity sensitivity)
+    {
+        return (float)sensitivity + 1;
+    }
+
+    public int LocalProfileCount()
+    {
+        int count = 0;
+        foreach (GameAspects.Profile profile in Game.Profiles)
+            if (profile.Local)
+                count += 1;
+        return count;
+    }
+    public int[] GetLocalProfileIndexes()
+    {
+        // Find each profiles 
+        List<int> localPlayerIndexs = new List<int>();
+        for (int i = 0; i < Game.Profiles.Count; i++)
+            if (Game.Profiles[i].Local)
+                localPlayerIndexs.Add(i);
+
+        return localPlayerIndexs.ToArray();
+    }
+
+
+    public InanimateObject GetInanimateByGamerId(int gamerId)
+    {
+        // Primarily used in networking to find the inanaimate object associated with a gamer id
+        if (gamerId == 0)
+            return null;
+
+        InanimateObject[] inanimateObjects = Globals.Instance.Containers.InanimateObjects.GetComponentsInChildren<InanimateObject>();
+
+        return Array.Find(inanimateObjects, p => p.GamerId == gamerId);
+    }
+    public GameAspects.Profile GetProfileByGamerId(int gamerId)
+    {
+        if (gamerId == 0)
+            return null;
+        GameAspects.Profile profile = Instance.Game.Profiles.Find(p => p.GamerId == gamerId);
+        return profile;
+    }
+    public List<GameAspects.Profile> GetTeamProfiles(int teamId)
+    {
+        List<GameAspects.Profile> profiles = new List<GameAspects.Profile>();
+        foreach (GameAspects.Profile profile in Game.Profiles)
+            if (profile.TeamId == teamId)
+                profiles.Add(profile);
+
+        return profiles;
+    }
+
+    public int[] GetScoreSortedTeamIndexes(List<GameAspects.Team> list)
+    {
+        List<GameAspects.Team> sortedList = new List<GameAspects.Team>();
+        sortedList.AddRange(list);
+        sortedList.Sort(delegate(GameAspects.Team x, GameAspects.Team y)
+        {
+            return y.Score.CompareTo(x.Score);
+        });
+
+        List<int> indexes = new List<int>();
+
+        for (int i = 0; i < sortedList.Count; i++)
+            for (int x = 0; x < list.Count; x++)
+                if (sortedList[i].Name == list[x].Name)
+                    indexes.Add(x);
+
+        return indexes.ToArray();
+    }
+    public List<GameAspects.Profile> GetScoreSortedProfiles(List<GameAspects.Profile> list)
+    {
+        list.Sort(delegate(GameAspects.Profile x, GameAspects.Profile y)
+        {
+            return y.Score.CompareTo(x.Score);
+        });
+
+        return list;
+    }
+
+
+    public bool IsVersus()
+    {
+        if (!Game.GameType.TeamGame || Game.Profiles.Count <= 1)
+            return true;
+        else
+        {
+            int teamComparison = Game.Profiles[0].TeamId;
+            for (int i = 1; i < Game.Profiles.Count; i++)
+            {
+                GameAspects.Profile profile = Game.Profiles[i];
+                if (profile.TeamId != teamComparison)
+                    return true;
+            }
+        }
+        return false;
+    }
+    public bool IsOnlyLocalProfiles()
+    {
+        foreach (GameAspects.Profile profile in Game.Profiles)
+            if (!profile.Local)
+                return false;
+        return true;
+    }
+    public bool CheckEnemies(GameAspects.Profile profileA, GameAspects.Profile profileB)
+    {
+        return Game.GameType.TeamGame && profileA.TeamId != profileB.TeamId || !Game.GameType.TeamGame && profileA != profileB;
+    }
+
+
+    public void AddProfileKill(int gamerId, bool fromNetwork = false)
+    {
+        if (gamerId == 0)
+            return;
+
+        // If the game has ended, abort
+        if (!Game.Playing && !fromNetwork)
+            return;
+
+
+        if (!fromNetwork && NetworkSessionManager.IsClient)
+        {
+            NetworkSessionNode.Instance.CmdAddProfileKill(gamerId);
+            return;
+        }
+
+        if (NetworkSessionManager.IsHost)
+            NetworkSessionNode.Instance.RpcAddProfileKill(gamerId);
+
+        // Add score to player, and if the game is team based add it to the players team as-well
+        GameAspects.Profile profile = GetProfileByGamerId(gamerId);
+        if (profile == null)
+            return;
+
+        profile.Kills += 1;
+
+        if (Game.GameType.TeamGame)
+            Game.Teams[profile.TeamId].Kills += 1;
+
+        if ((!fromNetwork || NetworkSessionManager.IsHost) && GameManager.Instance.Game.GameType.KillBased)
+            AddProfileScore(gamerId, fromNetwork);
+    }
+    public void AddProfileDeath(int gamerId, bool fromNetwork = false)
+    {
+        if (gamerId == 0)
+            return;
+        // If the game has ended, abort
+        if (!Game.Playing && !fromNetwork)
+            return;
+
+            if (!fromNetwork && NetworkSessionManager.IsClient)
+            {
+                NetworkSessionNode.Instance.CmdAddProfileDeath(gamerId);
+                return;
+            }
+            if (NetworkSessionManager.IsHost)
+                NetworkSessionNode.Instance.RpcAddProfileDeath(gamerId);
+
+
+        // Add score to player, and if the game is team based add it to the players team as-well
+        GameAspects.Profile profile = GetProfileByGamerId(gamerId);
+        if (profile == null)
+            return;
+
+        profile.Deaths += 1;
+
+        if (Game.GameType.TeamGame)
+            Game.Teams[profile.TeamId].Deaths += 1;
+    }
+    public void AddProfileScore(int gamerId, bool fromNetwork = false)
+    {
+        if (gamerId == 0)
+            return;
+
+        // If the game has ended, abort
+        if (!Game.Playing && !fromNetwork)
+            return;
+
+        if (!fromNetwork && NetworkSessionManager.IsClient)
+        {
+            NetworkSessionNode.Instance.CmdAddProfileScore(gamerId);
+            return;
+        }
+        if (NetworkSessionManager.IsHost)
+            NetworkSessionNode.Instance.RpcAddProfileScore(gamerId);
+        
+        int scoreToWin = GetScoreToWin();
+
+        // Add score to player, and if the game is team based add it to the players team as-well
+        GameAspects.Profile profile = GetProfileByGamerId(gamerId);
+        if (profile == null)
+            return;
+
+        profile.Score = scoreToWin == 0 ? profile.Score + 1 : Mathf.Min(profile.Score + 1, scoreToWin);
+
+        if (Game.GameType.TeamGame)
+            Game.Teams[profile.TeamId].Score = scoreToWin == 0 ? Game.Teams[profile.TeamId].Score + 1 : Mathf.Min(Game.Teams[profile.TeamId].Score + 1, scoreToWin);
+
+        // If the score to win is unlimited, abort
+        if (Game.GameType.ScoreToWin == 0)
+            return;
+
+        // If the score has reached its limit end the game
+        if (profile.Score >= scoreToWin || Game.Teams[profile.TeamId].Score >= scoreToWin)
+            EndGame();
+
     }
 
     [MethodReference("register_local_player")]
@@ -541,344 +930,5 @@ public class GameManager : MonoBehaviour
             i--;
         }
     }
-
-    public bool IsOnlyLocalProfiles()
-    {
-        foreach (GameAspects.Profile profile in Game.Profiles)
-            if (!profile.Local)
-                return false;
-        return true;
-    }
-    public bool ProfilesOpposing()
-    {
-        if (!Game.GameType.TeamGame || Game.Profiles.Count <= 1)
-            return true;
-        else
-        {
-            int teamComparison = Game.Profiles[0].TeamId;
-            for (int i = 1; i < Game.Profiles.Count; i++)
-            {
-                GameAspects.Profile profile = Game.Profiles[i];
-                if (profile.TeamId != teamComparison)
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    public int GetScoreToWin()
-    {
-        switch (Game.GameType.ScoreToWin)
-        {
-            case GameAspects.GameSettings.Score.Unlimited:
-                return 0;
-            case GameAspects.GameSettings.Score.One:
-                return 1;
-            case GameAspects.GameSettings.Score.Two:
-                return 2;
-            case GameAspects.GameSettings.Score.Three:
-                return 3;
-            case GameAspects.GameSettings.Score.Five:
-                return 5;
-            case GameAspects.GameSettings.Score.Ten:
-                return 10;
-            case GameAspects.GameSettings.Score.Fifteen:
-                return 15;
-            case GameAspects.GameSettings.Score.Twenty:
-                return 20;
-            case GameAspects.GameSettings.Score.TwentyFive:
-                return 25;
-            case GameAspects.GameSettings.Score.Fifty:
-                return 50;
-            case GameAspects.GameSettings.Score.OneHundred:
-                return 100;
-            case GameAspects.GameSettings.Score.TwoHundred:
-                return 200;
-            case GameAspects.GameSettings.Score.ThreeHundred:
-                return 300;
-            case GameAspects.GameSettings.Score.FiveHundred:
-                return 500;
-            case GameAspects.GameSettings.Score.OneThousand:
-                return 1000;
-            case GameAspects.GameSettings.Score.TwoThousand:
-                return 2000;
-            case GameAspects.GameSettings.Score.ThreeThousand:
-                return 3000;
-            case GameAspects.GameSettings.Score.FiveThousand:
-                return 5000;
-        }
-        return 0;
-    }
-    public int GetTimeLimit()
-    {
-        switch (Game.GameType.TimeLimit)
-        {
-            case GameAspects.GameSettings.Duration.Unlimited:
-                return 0;
-            case GameAspects.GameSettings.Duration.OneMinute:
-                return 60;
-            case GameAspects.GameSettings.Duration.TwoMinutes:
-                return 120;
-            case GameAspects.GameSettings.Duration.ThreeMinutes:
-                return 180;
-            case GameAspects.GameSettings.Duration.FiveMinutes:
-                return 300;
-            case GameAspects.GameSettings.Duration.TenMinutes:
-                return 600;
-            case GameAspects.GameSettings.Duration.FifteenMinutes:
-                return 900;
-            case GameAspects.GameSettings.Duration.ThirtyMinutes:
-                return 1800;
-            case GameAspects.GameSettings.Duration.OneHour:
-                return 3600;
-        }
-        return 0;
-    }
-
-    public bool CheckTieGame()
-    {
-        if (!ProfilesOpposing())
-        {
-            return false;
-        }
-        else if (Game.GameType.TeamGame)
-        {
-            GameAspects.Team winningTeam = GetWinningTeam();
-            foreach (GameAspects.Team team in Game.Teams)
-            {
-                if (team == winningTeam)
-                    continue;
-                if (team.Score == winningTeam.Score)
-                    return true;
-            }
-        }
-        else
-        {
-            GameAspects.Profile winnningProfile = GetWinningProfile();
-            foreach (GameAspects.Profile profile in Game.Profiles)
-            {
-                if (profile == winnningProfile)
-                    continue;
-                if (profile.Score == winnningProfile.Score)
-                    return true;
-            }
-        }
-        return false;
-    }
-    public GameAspects.Team GetWinningTeam()
-    {
-        GameAspects.Team winningTeam = Game.Teams[0];
-        if (!ProfilesOpposing())
-            return Game.Teams[Game.Profiles[0].TeamId];
-
-        foreach (GameAspects.Team team in Game.Teams)
-            if (team.Score > winningTeam.Score)
-                winningTeam = team;
-
-        return winningTeam;
-    }
-    public GameAspects.Profile GetWinningProfile()
-    {
-        GameAspects.Profile winningProfile = Game.Profiles[0];
-
-        foreach (GameAspects.Profile profile in Game.Profiles)
-            if (profile.Score > winningProfile.Score)
-                winningProfile = profile;
-
-        return winningProfile;
-    }
-
-
-    public static float GetLookSensitivity(GameAspects.Profile.Sensitivity sensitivity)
-    {
-        return (float)sensitivity + 1;
-    }
-
-    public int[] GetLocalProfileIndexes()
-    {
-        // Find each profiles 
-        List<int> localPlayerIndexs = new List<int>();
-        for (int profileIndex = 0; profileIndex < Game.Profiles.Count; profileIndex++)
-            if (Game.Profiles[profileIndex].Local)
-                localPlayerIndexs.Add(profileIndex);
-
-        return localPlayerIndexs.ToArray();
-    }
-
-    public int LocalProfileCount()
-    {
-        int count = 0;
-        foreach (GameAspects.Profile profile in Game.Profiles)
-                if (profile.Local)
-                    count += 1;
-        return count;
-    }
-
-    public List<GameAspects.Profile> GetTeamsProfiles(int teamId)
-    {
-        List<GameAspects.Profile> profiles = new List<GameAspects.Profile>();
-        foreach (GameAspects.Profile profile in Game.Profiles)
-            if (profile.TeamId == teamId)
-                profiles.Add(profile);
-
-        return profiles;
-    }
-
-    public int[] GetScoreSortedTeamIndexes(List<GameAspects.Team> list)
-    {
-        List<GameAspects.Team> sortedList = new List<GameAspects.Team>();
-        sortedList.AddRange(list);
-        sortedList.Sort(delegate(GameAspects.Team x, GameAspects.Team y)
-        {
-            return y.Score.CompareTo(x.Score);
-        });
-
-        List<int> indexes = new List<int>();
-
-        for (int i = 0; i < sortedList.Count; i++)
-            for (int j = 0; j < list.Count; j++)
-                if (sortedList[i].Name == list[j].Name)
-                    indexes.Add(j);
-
-        return indexes.ToArray();
-    }
-    public List<GameAspects.Profile> GetScoreSortedProfiles(List<GameAspects.Profile> list)
-    {
-        list.Sort(delegate(GameAspects.Profile x, GameAspects.Profile y)
-        {
-            return y.Score.CompareTo(x.Score);
-        });
-
-        return list;
-    }
-
-    public GameAspects.Profile GetProfileByGamerId(int gamerId)
-    {
-        if (gamerId == 0)
-            return null;
-        GameAspects.Profile profile = Instance.Game.Profiles.Find(p => p.GamerId == gamerId);
-        return profile;
-    }
-    public InanimateObject GetInanimateByGamerId(int gamerId)
-    {
-        if (gamerId == 0)
-            return null;
-        InanimateObject[] inanimateObjects = FindObjectsOfType<InanimateObject>();
-        return Array.Find(inanimateObjects, p => p.GamerId == gamerId);
-    }
-
-    public bool CheckIfProfilesEnemies(GameAspects.Profile profileA, GameAspects.Profile profileB)
-    {
-        return Game.GameType.TeamGame && profileA.TeamId != profileB.TeamId || !Game.GameType.TeamGame && profileA != profileB;
-    }
-
-    private void ResetStatistics()
-    {
-        // Reset the values for all teams and players
-        foreach (GameAspects.Team team in Game.Teams)
-        {
-            team.Score = 0;
-            team.Kills = 0;
-        }
-        foreach (GameAspects.Profile profile in Game.Profiles)
-        {
-            profile.Score = 0;
-            profile.Kills = 0;
-            profile.Deaths = 0;
-        }
-    }
-
-
-    public void AddProfileKill(int gamerId, bool fromNetwork = false)
-    {
-        if (gamerId == 0)
-            return;
-
-        // If the game has ended, abort
-        if (!Game.Playing && !fromNetwork)
-            return;
-
-
-        if (!fromNetwork && NetworkSessionManager.IsClient)
-        {
-            NetworkSessionNode.Instance.CmdAddProfileKill(gamerId);
-            return;
-        }
-        if (NetworkSessionManager.IsHost)
-            NetworkSessionNode.Instance.RpcAddProfileKill(gamerId);
-
-        // Add score to player, and if the game is team based add it to the players team as-well
-        GameAspects.Profile profile = GetProfileByGamerId(gamerId);
-        profile.Kills += 1;
-
-        if (Game.GameType.TeamGame)
-            Game.Teams[profile.TeamId].Kills += 1;
-
-        if ((!fromNetwork || NetworkSessionManager.IsHost) && GameManager.Instance.Game.GameType.KillBased)
-            AddProfileScore(gamerId, fromNetwork);
-    }
-    public void AddProfileDeath(int gamerId, bool fromNetwork = false)
-    {
-        if (gamerId == 0)
-            return;
-        // If the game has ended, abort
-        if (!Game.Playing && !fromNetwork)
-            return;
-
-            if (!fromNetwork && NetworkSessionManager.IsClient)
-            {
-                NetworkSessionNode.Instance.CmdAddProfileDeath(gamerId);
-                return;
-            }
-            if (NetworkSessionManager.IsHost)
-                NetworkSessionNode.Instance.RpcAddProfileDeath(gamerId);
-
-
-        // Add score to player, and if the game is team based add it to the players team as-well
-        GameAspects.Profile profile = GetProfileByGamerId(gamerId);
-        profile.Deaths += 1;
-
-        if (Game.GameType.TeamGame)
-            Game.Teams[profile.TeamId].Deaths += 1;
-    }
-    public void AddProfileScore(int gamerId, bool fromNetwork = false)
-    {
-        if (gamerId == 0)
-            return;
-
-        // If the game has ended, abort
-        if (!Game.Playing && !fromNetwork)
-            return;
-
-        if (!fromNetwork && NetworkSessionManager.IsClient)
-        {
-            NetworkSessionNode.Instance.CmdAddProfileScore(gamerId);
-            return;
-        }
-        if (NetworkSessionManager.IsHost)
-            NetworkSessionNode.Instance.RpcAddProfileScore(gamerId);
-
-
-
-        int scoreToWin = GetScoreToWin();
-
-        // Add score to player, and if the game is team based add it to the players team as-well
-        GameAspects.Profile profile = GetProfileByGamerId(gamerId);
-
-        profile.Score = scoreToWin == 0 ? profile.Score + 1 : Mathf.Min(profile.Score + 1, scoreToWin);
-
-        if (Game.GameType.TeamGame)
-            Game.Teams[profile.TeamId].Score = scoreToWin == 0 ? Game.Teams[profile.TeamId].Score + 1 : Mathf.Min(Game.Teams[profile.TeamId].Score + 1, scoreToWin);
-
-        // If the score to win is unlimited, abort
-        if (Game.GameType.ScoreToWin == 0)
-            return;
-
-        // If the score has reached its limit end the game
-        if (profile.Score >= scoreToWin || Game.Teams[profile.TeamId].Score >= scoreToWin)
-            EndGame();
-
-    }
-
     #endregion
 }

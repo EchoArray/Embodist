@@ -456,13 +456,13 @@ public class HeadsUpDisplay : MonoBehaviour
     // Pointers
     private void UpdatePointers()
     {
-        for (int pointerIndex = 0; pointerIndex < _pointers.Count; pointerIndex++)
+        for (int i = 0; i < _pointers.Count; i++)
         {
-            Pointer hudDamageIndicator = _pointers[pointerIndex];
+            Pointer hudDamageIndicator = _pointers[i];
             if (hudDamageIndicator.RectTransform == null)
             {
-                _pointers.RemoveAt(pointerIndex);
-                pointerIndex--;
+                _pointers.RemoveAt(i);
+                i--;
                 continue;
             }
 
@@ -511,9 +511,9 @@ public class HeadsUpDisplay : MonoBehaviour
     {
         // Reposition and sort waypoints
         Dictionary<int, float> distances = new Dictionary<int, float>();
-        for (int waypointIndex = 0; waypointIndex < _waypoints.Count; waypointIndex++)
+        for (int i = 0; i < _waypoints.Count; i++)
         {
-            Waypoint hudWaypoint = _waypoints[waypointIndex];
+            Waypoint hudWaypoint = _waypoints[i];
 
             // Destroy waypoint if either dependent transform is missing
             if (hudWaypoint.Transform == null || hudWaypoint.RectTransform == null)
@@ -521,13 +521,13 @@ public class HeadsUpDisplay : MonoBehaviour
                 if(hudWaypoint.RectTransform != null)
                     Destroy(hudWaypoint.RectTransform.gameObject);
 
-                _waypoints.RemoveAt(waypointIndex);
-                waypointIndex--;
+                _waypoints.RemoveAt(i);
+                i--;
                 continue;
             }
 
             // Add to object distance collection for sort order update
-            distances.Add(waypointIndex, Vector3.Distance(LocalPlayer.CameraController.transform.position, hudWaypoint.Transform.position + hudWaypoint.WorldOffset));
+            distances.Add(i, Vector3.Distance(LocalPlayer.CameraController.transform.position, hudWaypoint.Transform.position + hudWaypoint.WorldOffset));
 
             // Reposition waypoint to new world position, set visibility
             hudWaypoint.RectTransform.position = LocalPlayer.CameraController.Camera.WorldToScreenPoint(hudWaypoint.Transform.position + hudWaypoint.WorldOffset);
@@ -757,15 +757,15 @@ public class HeadsUpDisplay : MonoBehaviour
 
         string[] strings = new string[component.TextValues.TextValuePaths.Length];
         bool allEmpty = true;
-        for (int pathIndex = 0; pathIndex < component.TextValues.TextValuePaths.Length; pathIndex++)
+        for (int i = 0; i < component.TextValues.TextValuePaths.Length; i++)
         {
             // Define value
-            System.Object value = GetHudValue(component.TextValues.TextValuePaths[pathIndex]);
+            System.Object value = GetHudValue(component.TextValues.TextValuePaths[i]);
 
             if (value == null)
             {
                 // If the the value was null set the string to empty and continue
-                strings[pathIndex] = string.Empty;
+                strings[i] = string.Empty;
                 continue;
             }
 
@@ -782,7 +782,7 @@ public class HeadsUpDisplay : MonoBehaviour
                 allEmpty = false;
 
             // Define string at index
-            strings[pathIndex] = valueString;
+            strings[i] = valueString;
         }
 
         // Define format

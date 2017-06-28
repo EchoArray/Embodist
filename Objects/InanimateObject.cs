@@ -306,7 +306,6 @@ public class InanimateObject :  NetworkBehaviour
     {
         Matrix4x4 matrixBackup = Gizmos.matrix;
 
-
         foreach (TargetingBox targetingBox in TargetingBoxes)
         {
             Gizmos.matrix = Matrix4x4.TRS(transform.position, transform.rotation * Quaternion.Euler(targetingBox.Rotation), transform.lossyScale);
@@ -335,11 +334,7 @@ public class InanimateObject :  NetworkBehaviour
             Gizmos.DrawWireCube(topRight - (Vector3.forward * targetingBox.Size.z), Vector3.one * pointScale);
             Gizmos.DrawWireCube(bottomLeft - (Vector3.forward * targetingBox.Size.z), Vector3.one * pointScale);
             Gizmos.DrawWireCube(bottomRight - (Vector3.forward * targetingBox.Size.z), Vector3.one * pointScale);
-
-
         }
-
-
         Gizmos.matrix = matrixBackup;
     }
     #endregion
@@ -355,7 +350,9 @@ public class InanimateObject :  NetworkBehaviour
         _renderer.material = _material;
 
         NetworkTransform = this.gameObject.GetComponent<NetworkTransform>();
+        NetworkTransform.enabled = !NetworkSessionManager.IsLocal;
         
+
         _rigidbody = this.gameObject.GetComponent<Rigidbody>();
         _rigidbody.maxDepenetrationVelocity = 10;
 
@@ -515,7 +512,7 @@ public class InanimateObject :  NetworkBehaviour
             // Defines the angular velocity mod based on if the heavy inanimate object is stuck.
             float angularVelocityMod = 1;
 
-            bool stuck = _rigidbody.angularVelocity.magnitude < Globals.Instance.InanimateDefaults.Heavy.StuckVelocityMin;
+            bool stuck = _rigidbody.angularVelocity.magnitude < Globals.Instance.InanimateDefaults.Heavy.StuckVelocityCeiling;
             if (stuck && Class == Classification.Smashy && Movement.Grounded)
                 angularVelocityMod = Globals.Instance.InanimateDefaults.Heavy.StuckAngularVelocityIncrease;
 
@@ -530,7 +527,6 @@ public class InanimateObject :  NetworkBehaviour
     /// </summary>
     public void Jump()
     {
-
         if (Movement.Lunging)
             return;
 
@@ -566,14 +562,23 @@ public class InanimateObject :  NetworkBehaviour
     {
         RaycastHit raycastHit;
         bool hit = Target(out raycastHit);
+        
+        if (Weapon == null)
+            return;
+
+        bool allowProjectilDirection = false;
+        Vector3 direction = Vector3.zero;
+
         // Casts rays to determine the aiming position and rotates the inanimate object to face toward the aiming position.
         if (_aiming)
         {
-            Vector3 direction = hit && raycastHit.collider != null ? (raycastHit.point - Weapon.transform.position).normalized :
+            direction = hit && raycastHit.collider != null ? (raycastHit.point - Weapon.transform.position).normalized :
                 ((LocalPlayer.CameraController.transform.position + (LocalPlayer.CameraController.transform.forward * Globals.Instance.InanimateDefaults.TargetingDistance)) - this.transform.position).normalized;
 
             // Determine rotation scale and speed, rotate
             float rotationScale = Mathf.Min(Vector3.Distance(direction, Weapon.transform.forward), 1);
+            allowProjectilDirection = rotationScale < Globals.Instance.WeaponDefaults.ProjectileTargetingAimScaleThreshold;
+
             float rotationSpeed = Globals.Instance.InanimateDefaults.Medium.AimingTurnRate * rotationScale;
 
             Vector3 x = Vector3.Cross(Weapon.transform.forward, direction).normalized;
@@ -584,6 +589,8 @@ public class InanimateObject :  NetworkBehaviour
 
             _rigidbody.angularVelocity = t * rotationSpeed;
         }
+
+        Weapon.SetAiming(_aiming && allowProjectilDirection, direction);
     }
     /// <summary>
     /// Rotates the inanimate object toward the viewing direction of its controlling players camera controller on input.
@@ -603,25 +610,25 @@ public class InanimateObject :  NetworkBehaviour
         int layerBackup = this.gameObject.layer;
         this.gameObject.layer = 2;
 
+        InanimateObject inanimateObject;
+
         // Determine if the cast hit.
         bool hit = LocalPlayer.CameraController.Target(Globals.Instance.InanimateDefaults.TargetingRadius * LocalPlayer.HeadsUpDisplay.ScaleFactor,
-            Globals.Instance.InanimateDefaults.TargetingDistance, out raycastHit, Globals.Instance.InanimateDefaults.TargetingIgnoredLayers);
-
-
+            Globals.Instance.InanimateDefaults.TargetingDistance, out raycastHit, out inanimateObject, Globals.Instance.InanimateDefaults.TargetingIgnoredLayers, true);
+        
         // Restore original layer post cast
         this.gameObject.layer = layerBackup;
 
-        CheckTargetingState(raycastHit);
+        CheckTargetingState(raycastHit, inanimateObject);
         return hit;
     }
-    private void CheckTargetingState(RaycastHit raycastHit)
+    private void CheckTargetingState(RaycastHit raycastHit, InanimateObject inanimateObject)
     {
         TargetingState = TargetingType.None;
         LocalPlayer.CameraController.AttachedTurningScale = 1;
 
-        if (raycastHit.collider != null)
+        if (inanimateObject != null && inanimateObject != this)
         {
-            InanimateObject inanimateObject = raycastHit.collider.gameObject.GetComponent<InanimateObject>();
             if (inanimateObject != null && inanimateObject.Controlled)
             {
                 if (GameManager.Instance.Game.GameType.TeamGame)
@@ -680,9 +687,9 @@ public class InanimateObject :  NetworkBehaviour
             return;
 
         bool grounded = false;
-        for (int contact = 0; contact < contacts.Length; contact++)
+        for (int i = 0; i < contacts.Length; i++)
         {
-            bool withinAngleBias = Vector3.Angle(Vector3.up, contacts[contact].normal) < Globals.Instance.InanimateDefaults.AngleBias;
+            bool withinAngleBias = Vector3.Angle(Vector3.up, contacts[i].normal) < Globals.Instance.InanimateDefaults.GroundAngleBias;
 
             if (!Movement.Lunging)
             {
@@ -696,11 +703,11 @@ public class InanimateObject :  NetworkBehaviour
             else
             {
                 // Check lunge collision
-                InanimateObject inanimateObject = contacts[contact].otherCollider.gameObject.GetComponent<InanimateObject>();
+                InanimateObject inanimateObject = contacts[i].otherCollider.gameObject.GetComponent<InanimateObject>();
 
-                if (inanimateObject != null || !withinAngleBias)
+                if ((inanimateObject != null && inanimateObject.Controlled) || !withinAngleBias)
                 {
-                    LungeImpact(contacts[contact].point, contacts[contact].normal);
+                    LungeImpact(contacts[i].point, contacts[i].normal);
                     return;
                 }
             }
@@ -718,7 +725,7 @@ public class InanimateObject :  NetworkBehaviour
         {
 
             float contactAngle = Vector3.Angle(Vector3.up, collision.contacts[0].normal);
-            SetGrounding(contactAngle < Globals.Instance.InanimateDefaults.AngleBias, true);
+            SetGrounding(contactAngle < Globals.Instance.InanimateDefaults.GroundAngleBias, true);
 
             if (Class == Classification.Smashy)
                 SmashyAttack(collision.gameObject.GetComponent<InanimateObject>());
@@ -776,7 +783,7 @@ public class InanimateObject :  NetworkBehaviour
 
 
         float distanceToLookingPosition = Vector3.Distance(LocalPlayer.CameraController.transform.position, Movement.LungeLookingPosition);
-        Movement.AllowLungeRotationCorrection = distanceToLookingPosition > Globals.Instance.InanimateDefaults.Light.Lunge.MinCameraCorrectionLungeDistance;
+        Movement.AllowLungeRotationCorrection = distanceToLookingPosition > Globals.Instance.InanimateDefaults.Light.Lunge.CameraCorrectionThreshold;
 
         Development.AddTimedSphereGizmo(Color.white, 1f, Movement.LungeLookingPosition, 5f);
 
@@ -813,7 +820,7 @@ public class InanimateObject :  NetworkBehaviour
     }
     private void SmashyAttack(InanimateObject inanimateObject)
     {
-        if (inanimateObject == null || !inanimateObject.Controlled || _rigidbody.velocity.magnitude <= Globals.Instance.InanimateDefaults.Heavy.DamageApplicationVelocityMagnitude)
+        if (inanimateObject == null || !inanimateObject.Controlled || _rigidbody.velocity.magnitude <= Globals.Instance.InanimateDefaults.Heavy.DamageApplicationVelocityMagnitudeThreshold)
             return;
 
         // Directly applies damage to an inanimate object.

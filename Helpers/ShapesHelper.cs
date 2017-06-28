@@ -22,14 +22,14 @@ public class ShapesHelper
 
         // Find each point evenly around a circle
         float thetaDelta = (2f * Mathf.PI) * (1f / sides);
-        for (int pointStep = 0; pointStep < sides; pointStep++)
+        for (int i = 0; i < sides; i++)
         {
-            float iteration = thetaDelta * pointStep;
+            float iteration = thetaDelta * i;
             Vector3 point = Vector2.zero;
             point.x = Mathf.Cos(iteration);
             point.y = Mathf.Sin(iteration);
 
-            points[pointStep] = point;
+            points[i] = point;
         }
         _storedRegularPolys.Add(sides, points);
         return points;

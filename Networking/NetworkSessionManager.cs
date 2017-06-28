@@ -97,7 +97,7 @@ public class NetworkSessionManager : NetworkManager
         GameManager.Instance.RemoveAllProfilesForConnection(conn.connectionId);
         NetworkSessionNode.Instance.RpcPeerDisconnected(conn.connectionId);
 
-        if (GameManager.Instance.Game.Playing && !GameManager.Instance.ProfilesOpposing())
+        if (GameManager.Instance.Game.Playing && !GameManager.Instance.IsVersus())
             GameManager.Instance.EndGame();
     }
 
@@ -105,7 +105,7 @@ public class NetworkSessionManager : NetworkManager
     {
         base.OnStopHost();
         GameManager.Instance.RemoveAllNonLocalProfiles();
-        if (GameManager.Instance.Game.Playing && !GameManager.Instance.ProfilesOpposing())
+        if (GameManager.Instance.Game.Playing && !GameManager.Instance.IsVersus())
             GameManager.Instance.EndGame();
     }
 

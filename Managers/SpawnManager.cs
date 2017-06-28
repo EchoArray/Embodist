@@ -10,8 +10,18 @@ public class SpawnManager : MonoBehaviour
 
     #region Values
     public static SpawnManager Instance;
+
+    /// <summary>
+    /// Defines the ketchup game object used for the game type setting ketchup only.
+    /// </summary>
     public GameObject Ketchup;
-    public float RespawnDistance;
+
+    /// <summary>
+    /// Defines the distance from an objects spawn in-which an uncontrolled inanaimate object will reset to its original position.
+    /// </summary>
+    public float RespawnDistance = 20;
+    // Defines the next time a distance check will be made to all active objects.
+    private float _nextCheckDistanceTime;
 
     [Serializable]
     public class TeamSpawn
@@ -161,7 +171,7 @@ public class SpawnManager : MonoBehaviour
     #region Unity Functions
     private void Awake()
     {
-        ClearAllSpawns();
+        ClearAllObjects();
         Initialize();
     }
     private void Start()
@@ -223,10 +233,23 @@ public class SpawnManager : MonoBehaviour
     private void Initialize()
     {
         Instance = this;
-        GetIgnoredSpawns();
+
+        SetIgnoredObjectSpawns();
     }
 
-    private float _nextCheckDistanceTime;
+    private void SetIgnoredObjectSpawns()
+    {
+        if (GameManager.Instance == null)
+            return;
+        foreach (ObjectSpawn objectSpawn in ObjectSpawns)
+        {
+            InanimateObject prefabInanimateObject = objectSpawn.ObjectPrefab.GetComponent<InanimateObject>();
+            if (prefabInanimateObject != null && prefabInanimateObject.Class == InanimateObject.Classification.Bomb && GameManager.Instance.Game.GameType.Mode != GameManager.GameAspects.GameSettings.GameMode.Bomb)
+                objectSpawn.Ignore = true;
+        }
+    }
+
+
     private void UpdateObjectRespawns()
     {
         if (NetworkSessionManager.IsClient)
@@ -247,7 +270,7 @@ public class SpawnManager : MonoBehaviour
                     if (distanceFromSpawn > RespawnDistance)
                     {
                         ResetObject(objectSpawn);
-                        ResetChildObjects(objectSpawn);
+                        ResetChildrenObjects(objectSpawn);
                     }
                 }
             }
@@ -261,34 +284,25 @@ public class SpawnManager : MonoBehaviour
             else if (objectSpawn.InitialSpawn || (objectSpawn.AwaitingRespawn && Time.time >= objectSpawn.RespawnTime))
             {
                 // Otherwise, if the object has yet to be spawned or the object is awaiting spawn and the respawn time is up
-                RespawnObject(objectSpawn);
+                SpawnObject(objectSpawn);
             }
         }
         if (checkDistance)
             _nextCheckDistanceTime = Time.time + 1;
     }
 
-    private void GetIgnoredSpawns()
-    {
-        foreach (ObjectSpawn objectSpawn in ObjectSpawns)
-        {
-            InanimateObject prefabInanimateObject = objectSpawn.ObjectPrefab.GetComponent<InanimateObject>();
-            if (prefabInanimateObject != null && prefabInanimateObject.Class == InanimateObject.Classification.Bomb && GameManager.Instance.Game.GameType.Mode != GameManager.GameAspects.GameSettings.GameMode.Bomb)
-                objectSpawn.Ignore = true;
-        }
-    }
 
-    public void RespawnObject(ObjectSpawn objectSpawn)
+    public void SpawnObject(ObjectSpawn objectSpawn)
     {
         // Spawn the object and define the instances values
         GameObject spawnedObject = GameManager.Instance.Game.GameType.KetchupOnly && !objectSpawn.IgnoreKetchupOnly ? Ketchup : objectSpawn.ObjectPrefab;
         GameObject newObject = Instantiate(spawnedObject, objectSpawn.Position, Quaternion.Euler(objectSpawn.Rotation));
 
+        newObject.name = objectSpawn.ObjectPrefab.name;
 
         if (NetworkSessionManager.IsHost)
             NetworkServer.Spawn(newObject);
 
-        newObject.name = objectSpawn.ObjectPrefab.name;
 
         InanimateObject inanimateObject = newObject.GetComponent<InanimateObject>();
         if (inanimateObject != null)
@@ -298,7 +312,7 @@ public class SpawnManager : MonoBehaviour
         objectSpawn.InitialSpawn = false;
         objectSpawn.AwaitingRespawn = false;
 
-        ResetChildObjects(objectSpawn);
+        ResetChildrenObjects(objectSpawn);
     }
     private void ResetObject(ObjectSpawn objectSpawn)
     {
@@ -316,7 +330,7 @@ public class SpawnManager : MonoBehaviour
             }
         }
     }
-    private void ResetChildObjects(ObjectSpawn objectSpawn)
+    private void ResetChildrenObjects(ObjectSpawn objectSpawn)
     {
         for (int i = 0; i < objectSpawn.CoRespawnedChildIndexes.Length; i++)
         {
@@ -325,29 +339,12 @@ public class SpawnManager : MonoBehaviour
         }
     }
 
-    public void ClearAllSpawns()
+    public void ClearAllObjects()
     {
         foreach (ObjectSpawn objectSpawn in ObjectSpawns)
         {
             objectSpawn.InitialSpawn = true;
             DestroyImmediate(objectSpawn.ActiveObject);
-        }
-    }
-    public void RespawnLocalCamera(LocalPlayer localPlayer)
-    {
-        // Reset camera position to a spawn point
-        if (GameManager.Instance.Game.GameType.TeamGame)
-        {
-            // If it is a team game, find the players team spawn location
-            localPlayer.CameraController.transform.position = SpawnManager.Instance.TeamSpawns[localPlayer.Profile.TeamId].Position;
-            localPlayer.CameraController.transform.eulerAngles = SpawnManager.Instance.TeamSpawns[localPlayer.Profile.TeamId].Rotation;
-        }
-        else
-        {
-            // Otherwise randomize the spawn location among the available positions
-            int spawn = UnityEngine.Random.Range(0, SpawnManager.Instance.PlayerSpawns.Count);
-            localPlayer.CameraController.transform.position = SpawnManager.Instance.PlayerSpawns[spawn].Position;
-            localPlayer.CameraController.transform.eulerAngles = SpawnManager.Instance.PlayerSpawns[spawn].Rotation;
         }
     }
 
@@ -384,12 +381,30 @@ public class SpawnManager : MonoBehaviour
             GameObject newTerritory = Instantiate(MultiplayerManager.Instance.TerritoryPrefab, position, Quaternion.Euler(0, objective.YRotation, 0), Globals.Instance.Containers.Objectives);
             Territory territory = newTerritory.GetComponent<Territory>();
             territory.SetDefaults(type, objective.TeamId, objective.Name);
-
-
-
+            
             if (NetworkSessionManager.IsHost)
                 NetworkServer.Spawn(newTerritory);
         }
     }
+
+
+    public void RespawnCamera(LocalPlayer localPlayer)
+    {
+        // Reset camera position to a spawn point
+        if (GameManager.Instance.Game.GameType.TeamGame)
+        {
+            // If it is a team game, find the players team spawn location
+            localPlayer.CameraController.transform.position = SpawnManager.Instance.TeamSpawns[localPlayer.Profile.TeamId].Position;
+            localPlayer.CameraController.transform.eulerAngles = SpawnManager.Instance.TeamSpawns[localPlayer.Profile.TeamId].Rotation;
+        }
+        else
+        {
+            // Otherwise randomize the spawn location among the available positions
+            int spawn = UnityEngine.Random.Range(0, SpawnManager.Instance.PlayerSpawns.Count);
+            localPlayer.CameraController.transform.position = SpawnManager.Instance.PlayerSpawns[spawn].Position;
+            localPlayer.CameraController.transform.eulerAngles = SpawnManager.Instance.PlayerSpawns[spawn].Rotation;
+        }
+    }
+
     #endregion
 }

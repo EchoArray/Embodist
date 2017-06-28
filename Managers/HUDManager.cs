@@ -174,7 +174,7 @@ public class HUDManager : MonoBehaviour
                 continue;
 
 
-            bool enemies = GameManager.Instance.CheckIfProfilesEnemies(headsUpDisplay.LocalPlayer.Profile, profile);
+            bool enemies = GameManager.Instance.CheckEnemies(headsUpDisplay.LocalPlayer.Profile, profile);
             bool attached = headsUpDisplay.LocalPlayer.InanimateObject != null;
 
 
@@ -211,7 +211,7 @@ public class HUDManager : MonoBehaviour
             if (inanimateObject == null)
                 continue;
 
-            bool enemies = GameManager.Instance.CheckIfProfilesEnemies(headsUpDisplay.LocalPlayer.Profile, profile);
+            bool enemies = GameManager.Instance.CheckEnemies(headsUpDisplay.LocalPlayer.Profile, profile);
             if (!enemies)
                 continue;
 

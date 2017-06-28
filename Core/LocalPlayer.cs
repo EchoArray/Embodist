@@ -27,6 +27,7 @@ public class LocalPlayer : MonoBehaviour
     /// <summary>
     ///  Determines which inanimate object the player is currently controlling
     /// </summary>
+    [HideInInspector]
     [ValueReference("inanimate_object")]
     public InanimateObject InanimateObject;
 
@@ -41,11 +42,7 @@ public class LocalPlayer : MonoBehaviour
     /// </summary>
     [HideInInspector]
     public bool AwaitingRespawn;
-
-    [HideInInspector]
-    [ValueReference("area_name")]
-    public string AreaName;
-
+    
     private float _beaconCooledDownTime;
     private int _lastKillerGamerId;
     #endregion
@@ -160,7 +157,6 @@ public class LocalPlayer : MonoBehaviour
     }
     public void AttachedDied(bool countDeath, int killerGamerId)
     {
-        AreaName = string.Empty;
         _lastKillerGamerId = killerGamerId;
         InanimateObject = null;
 
@@ -267,7 +263,7 @@ public class LocalPlayer : MonoBehaviour
         if (InanimateObject != null)
             InanimateObject.Kill(true);
         CameraController.SetAttributes(false);
-        SpawnManager.Instance.RespawnLocalCamera(this);
+        SpawnManager.Instance.RespawnCamera(this);
         XboxInputManager.ClearControllerVibrations(Profile.ControllerId);
         AwaitingRespawn = false;
     }

@@ -18,6 +18,10 @@ public class CameraController : MonoBehaviour
     [HideInInspector]
     public Camera Camera;
 
+    /// <summary>
+    /// Defines the camera effector componenet attached to the camera controllers game object.
+    /// </summary>
+    [HideInInspector]
     public CameraEffector CameraEffector;
 
     /// <summary>
@@ -340,34 +344,10 @@ public class CameraController : MonoBehaviour
     }
     private static float ClampAngle(float angle, Vector2 minMax)
     {
-        // Clamps and angle between a minimum and maximum angle.
-        // Make our range between [0-360]
-        angle = (360 + (angle % 360)) % 360;
-        minMax.x = (360 + (minMax.x % 360)) % 360;
-        minMax.y = (360 + (minMax.y % 360)) % 360;
+        if (angle > 180)
+            angle = -(360 - angle);
 
-        // If min is less than max
-        if (minMax.x <= minMax.y)
-            Mathf.Clamp(angle, minMax.x, minMax.y);
-        else
-        {
-            // If in bounds, if not, return
-            if (angle >= 0 && angle <= minMax.y)
-                return angle;
-            else if (angle <= 360 && angle >= minMax.x)
-                return angle;
-            else
-            {
-                // Clamp to closest
-                if (Mathf.Abs(angle - minMax.y) < Mathf.Abs(angle - minMax.x))
-                    return minMax.y;
-                else
-                    return minMax.x;
-            }
-
-        }
-
-        return 0;
+        return Mathf.Clamp(angle, minMax.x, minMax.y);
     }
 
     private void UpdateZoom()
@@ -467,12 +447,11 @@ public class CameraController : MonoBehaviour
         RaycastHit raycastHit;
         // bool hit = CastRadiusFromCenter(Camera, SelectionRadius * LocalPlayer.HeadsUpDisplay.ScaleFactor, 6, SelectionDistance, out raycastHit, 0);
 
-        bool hit = Target(SelectionRadius * LocalPlayer.HeadsUpDisplay.ScaleFactor, SelectionDistance, out raycastHit, 0);
+        InanimateObject inanaimateObject;
 
-        _prospectSelection = null;
+        bool hit = Target(SelectionRadius * LocalPlayer.HeadsUpDisplay.ScaleFactor, SelectionDistance, out raycastHit, out inanaimateObject, 0);
 
-        if (hit && raycastHit.collider != null)
-            _prospectSelection = raycastHit.collider.gameObject.GetComponent<InanimateObject>();
+        _prospectSelection = inanaimateObject;
 
         if (_prospectSelection == null)
         {
@@ -586,68 +565,89 @@ public class CameraController : MonoBehaviour
         else if (classification == InanimateObject.Classification.Smashy && !GameManager.Instance.Game.GameType.FloppyAllowed)
             enabled = false;
         return enabled;
-    } 
+    }
     #endregion
 
     #region Targeting
-    public bool Target(float targetingRadius, float distance, out RaycastHit raycastHit, LayerMask ignoredLayers)
+    public bool Target(float radius, float distance, out RaycastHit raycastHit, out InanimateObject inanimateObject, LayerMask ignoredLayers, bool controlledOnly = false)
     {
         raycastHit = new RaycastHit();
-
+        inanimateObject = null;
         // Calculate screen center
         Vector2 screenCenter = (new Vector2(Camera.pixelRect.width, Camera.pixelRect.height) / 2) + Camera.pixelRect.position;
 
-        // Create radius points
-        Vector2[] radiusPoints = ShapesHelper.CreateRegularPoly2D(8);
-        Vector2[] relativeRadiusPoints = new Vector2[8];
-        for (int i = 0; i < radiusPoints.Length; i++)
-            relativeRadiusPoints[i] = screenCenter + radiusPoints[i] * targetingRadius;
-
-        // Loop through each inanimate object to get its targeting boxes
-        for (int j = 0; j < Globals.Instance.Containers.InanimateObjects.childCount; j++)
+        if (radius > 0)
         {
-            InanimateObject inanimateObject = Globals.Instance.Containers.InanimateObjects.GetChild(j).gameObject.GetComponent<InanimateObject>();
-
-            foreach (InanimateObject.TargetingBox targetingBox in inanimateObject.TargetingBoxes)
+            // Loop through each inanimate object to get its targeting boxes
+            InanimateObject[] inanimateObjects = GetTargets(distance);
+            if (inanimateObjects.Length > 0)
             {
-                // Define the points of the target
-                Vector3[] targetWorldPoints = null;
-                Vector3[] targetScreenPoints = null;
-                GetTargetPoints(targetingBox, inanimateObject.transform, out targetWorldPoints, out targetScreenPoints);
+                // Create radius points
+                Vector2[] radiusPoints = ShapesHelper.CreateRegularPoly2D(8);
+                Vector2[] relativeRadiusPoints = new Vector2[8];
+                for (int i = 0; i < radiusPoints.Length; i++)
+                    relativeRadiusPoints[i] = screenCenter + radiusPoints[i] * radius;
+                
+                foreach (InanimateObject targetInanimate in inanimateObjects)
+                {
+                    foreach (InanimateObject.TargetingBox targetingBox in targetInanimate.TargetingBoxes)
+                    {
+                        // Define the points of the target
+                        Vector3[] targetWorldPoints = null;
+                        Vector3[] targetScreenPoints = null;
+                        GetTargetPoints(targetingBox, targetInanimate.transform, ref targetWorldPoints, ref targetScreenPoints);
 
-                // Check if the reticle and the target box overlap
-                if (TargetInRadius(screenCenter, targetingRadius, relativeRadiusPoints, distance, targetWorldPoints, targetScreenPoints, inanimateObject, out raycastHit, ~ignoredLayers))
-                    return true;
+                        // Check if the reticle and the target box overlap
+                        if (TargetInRadius(screenCenter, radius, relativeRadiusPoints, distance, targetWorldPoints, targetScreenPoints, targetInanimate, out raycastHit, ~ignoredLayers))
+                        {
+                            inanimateObject = targetInanimate;
+                            return true;
+                        }
+                    }
+                }
             }
         }
 
-        return Physics.Raycast(Camera.ScreenPointToRay(screenCenter), out raycastHit, distance, ~ignoredLayers);
+        bool hit = Physics.Raycast(Camera.ScreenPointToRay(screenCenter), out raycastHit, distance, ~ignoredLayers);
+        if (hit)
+            inanimateObject = raycastHit.collider.GetComponent<InanimateObject>();
+        return hit;
     }
-    private bool TargetInRadius(Vector2 screenCenter, float radius, Vector2[] radiusPoints, float maxDistance, Vector3[] targetWorldPoints, Vector3[] targetScreenPoints, InanimateObject objectProperties, out RaycastHit raycastHit, LayerMask ignoredLayers)
+
+    private InanimateObject[] GetTargets(float distance, bool controlledOnly = false)
+    {
+        List<InanimateObject> inanimateObjects = new List<InanimateObject>();
+
+        for (int i = 0; i < Globals.Instance.Containers.InanimateObjects.childCount; i++)
+        {
+            Transform childTransform = Globals.Instance.Containers.InanimateObjects.GetChild(i);
+
+            float distanceToTarget = Vector3.Distance(this.transform.position, childTransform.position);
+            if (distanceToTarget <= distance)
+            {
+                InanimateObject inanaimateObject = childTransform.GetComponent<InanimateObject>();
+                if (!controlledOnly || controlledOnly && inanaimateObject.Controlled)
+                    inanimateObjects.Add(inanaimateObject);
+            }
+        }
+        return inanimateObjects.ToArray();
+    }
+    private bool TargetInRadius(Vector2 screenCenter, float radius, Vector2[] radiusPoints, float maxDistance, Vector3[] targetWorldPoints, Vector3[] targetScreenPoints, InanimateObject inanimateObject, out RaycastHit raycastHit, LayerMask ignoredLayers)
     {
         raycastHit = new RaycastHit();
-
-        if (radius == 0)
-            return false;
-
-        // Check distance
-        float distanceToTarget = Vector3.Distance(this.transform.position, objectProperties.transform.position);
-        bool foundTarget = distanceToTarget <= maxDistance;
-
-        if (!foundTarget)
-            return false;
-
+        
         int worldPointIndex = 0;
 
         // Check if a point from the targeting box is in the radius
-        foundTarget = PointsInRadius(screenCenter, radius, targetScreenPoints, out worldPointIndex);
+        bool foundTarget = PointsInRadius(screenCenter, radius, targetScreenPoints, out worldPointIndex);
 
         if (foundTarget)
         {
             // If a point of the target is within the radius cast to it, if hit 
             foundTarget = false;
-            if (Physics.Raycast(this.transform.position, targetWorldPoints[worldPointIndex] - this.transform.position, out raycastHit, maxDistance, ignoredLayers))
-                foundTarget = raycastHit.collider.gameObject == objectProperties.gameObject;
+            bool hit = Physics.Raycast(this.transform.position, targetWorldPoints[worldPointIndex] - this.transform.position, out raycastHit, maxDistance, ignoredLayers);
+            if (hit)
+                foundTarget = raycastHit.collider.gameObject == inanimateObject.gameObject;
         }
         else
         {
@@ -658,9 +658,10 @@ public class CameraController : MonoBehaviour
                 if (foundTarget)
                 {
                     Ray screenPointToRay = Camera.ScreenPointToRay(radiusPoint);
-                    if (Physics.Raycast(screenPointToRay, out raycastHit, maxDistance, ignoredLayers))
+                    bool hit = Physics.Raycast(screenPointToRay, out raycastHit, maxDistance, ignoredLayers);
+                    if (hit)
                     {
-                        foundTarget = raycastHit.collider.gameObject == objectProperties.gameObject;
+                        foundTarget = raycastHit.collider.gameObject == inanimateObject.gameObject;
                         if (foundTarget)
                             break;
                     }
@@ -670,7 +671,7 @@ public class CameraController : MonoBehaviour
 
         return foundTarget;
     }
-    private void GetTargetPoints(InanimateObject.TargetingBox targetingBox, Transform targetTransform, out Vector3[] targetWorldPoints, out Vector3[] targetScreenPoints)
+    private void GetTargetPoints(InanimateObject.TargetingBox targetingBox, Transform targetTransform, ref Vector3[] targetWorldPoints, ref Vector3[] targetScreenPoints)
     {
         targetWorldPoints = new Vector3[8];
         targetScreenPoints = new Vector3[8];
@@ -687,11 +688,11 @@ public class CameraController : MonoBehaviour
         targetWorldPoints[6] = targetWorldPoints[2] - backOffset;
         targetWorldPoints[7] = targetWorldPoints[3] - backOffset;
 
-        for (int e = 0; e < 8; e++)
+        for (int i = 0; i < 8; i++)
         {
             // Create relative points 
-            targetWorldPoints[e] = (targetTransform.rotation * Quaternion.Euler(targetingBox.Rotation)) * Vector3.Scale(targetWorldPoints[e], targetTransform.localScale) + targetTransform.position;
-            targetScreenPoints[e] = Camera.WorldToScreenPoint(targetWorldPoints[e]);
+            targetWorldPoints[i] = (targetTransform.rotation * Quaternion.Euler(targetingBox.Rotation)) * Vector3.Scale(targetWorldPoints[i], targetTransform.localScale) + targetTransform.position;
+            targetScreenPoints[i] = Camera.WorldToScreenPoint(targetWorldPoints[i]);
         }
     }
     private bool PointsInRadius(Vector2 screenCenter, float radius, Vector3[] targetScreenPoints, out int worldPoint)

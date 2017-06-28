@@ -79,11 +79,6 @@ public class TriggerVolume : MonoBehaviour
         Initialize();
     }
 
-    private void Update()
-    {
-
-    }
-
     private void OnDrawGizmos()
     {
         BoxCollider trigger = null;
@@ -192,7 +187,7 @@ public class TriggerVolume : MonoBehaviour
                 switch (triggerEvent.Action)
                 {
                     case TriggerAction.Kill:
-                        InanimateObject inanimateObject = null;
+                        InanimateObject inanimateObject = gameObject.GetComponent<InanimateObject>();
                         if (inanimateObject != null)
                             inanimateObject.Kill(true);
                         break;

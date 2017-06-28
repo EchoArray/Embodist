@@ -130,17 +130,17 @@ public class Territory : NetworkBehaviour
         contested = false;
         if (GameManager.Instance.Game.GameType.TeamGame)
         {
-            for (int occupant = 0; occupant < _occupants.Count; occupant++)
+            for (int i = 0; i < _occupants.Count; i++)
             {
                 // If the occupant index is 0 define initial team
-                if (occupant == 0)
+                if (i == 0)
                 {
-                    occupyingTeam = _occupants[occupant].TeamId;
+                    occupyingTeam = _occupants[i].TeamId;
                     continue;
                 }
 
                 // If the game is team based and there is more than one team in the territory; it is contested
-                if (_occupants[occupant].TeamId != occupyingTeam)
+                if (_occupants[i].TeamId != occupyingTeam)
                 {
                     contested = true;
                     break;

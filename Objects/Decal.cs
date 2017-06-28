@@ -6,6 +6,11 @@ public class Decal : MonoBehaviour
 {
     #region Values
     /// <summary>
+    /// Determines if the game is currently allowing for decals to be cast.
+    /// </summary>
+    public static bool AllowDecals;
+
+    /// <summary>
     /// Defines the scale of the decal.
     /// </summary>
     public float Scale;
@@ -147,19 +152,18 @@ public class Decal : MonoBehaviour
     {
         Mesh mesh = affectedObject.GetComponent<MeshFilter>().sharedMesh;
 
-        if (mesh == null || affectedObject.layer != Globals.STRUCTURE_LAYER)
+        if (!AllowDecals || mesh == null || affectedObject.layer != Globals.STRUCTURE_LAYER)
         {
             Destroy(this.gameObject);
             return;
         }
 
         Initialize(lightmapColor);
-
-
+        
         GetMeshData(mesh, affectedObject.transform.localToWorldMatrix);
         CompositeMesh();
     }
-
+    
 
     private void CompositeMesh()
     {
@@ -209,12 +213,12 @@ public class Decal : MonoBehaviour
 
         Development.Out(this, string.Format("{0} Triangles,  {1} Vertices", triangles.Length, vertices.Length), Development.MessagePriority.Low);
 
-        for (int triangle = 0; triangle < triangles.Length; triangle += 3)
+        for (int i = 0; i < triangles.Length; i += 3)
         {
             // Define indices
-            int indice0 = triangles[triangle];
-            int indice1 = triangles[triangle + 1];
-            int indice2 = triangles[triangle + 2];
+            int indice0 = triangles[i];
+            int indice1 = triangles[i + 1];
+            int indice2 = triangles[i + 2];
 
             // Define and offset verts to world space
             Vector3 vertice0 = matrix.MultiplyPoint(vertices[indice0]);
@@ -263,10 +267,10 @@ public class Decal : MonoBehaviour
     private void AddPolygon(List<Vector3> vertices, Vector3 normal)
     {
         int indice0 = AddVertex(vertices[0], normal);
-        for (int vertice = 1; vertice < vertices.Count - 1; vertice++)
+        for (int i = 1; i < vertices.Count - 1; i++)
         {
-            int indice1 = AddVertex(vertices[vertice], normal);
-            int indice2 = AddVertex(vertices[vertice + 1], normal);
+            int indice1 = AddVertex(vertices[i], normal);
+            int indice2 = AddVertex(vertices[i + 1], normal);
 
             _bufferIndices.Add(indice0);
             _bufferIndices.Add(indice1);
@@ -278,10 +282,10 @@ public class Decal : MonoBehaviour
         bool[] positive = new bool[9];
         int positiveCount = 0;
 
-        for (int vertice = 0; vertice < vertices.Count; vertice++)
+        for (int i = 0; i < vertices.Count; i++)
         {
-            positive[vertice] = !plane.GetSide(vertices[vertice]);
-            if (positive[vertice])
+            positive[i] = !plane.GetSide(vertices[i]);
+            if (positive[i])
                 positiveCount++;
         }
 
@@ -295,18 +299,18 @@ public class Decal : MonoBehaviour
 
         List<Vector3> tempVertices = new List<Vector3>();
 
-        for (int vertice = 0; vertice < vertices.Count; vertice++)
+        for (int i = 0; i < vertices.Count; i++)
         {
-            int next = vertice + 1;
+            int next = i + 1;
             next %= vertices.Count;
 
-            if (positive[vertice])
-                tempVertices.Add(vertices[vertice]);
+            if (positive[i])
+                tempVertices.Add(vertices[i]);
 
-            if (positive[vertice] != positive[next])
+            if (positive[i] != positive[next])
             {
                 Vector3 v1 = vertices[next];
-                Vector3 v2 = vertices[vertice];
+                Vector3 v2 = vertices[i];
 
                 Vector3 v = LineCast(plane, v1, v2);
                 tempVertices.Add(v);
@@ -333,9 +337,9 @@ public class Decal : MonoBehaviour
     }
     private int FindVertex(Vector3 vertex)
     {
-        for (int vertice = 0; vertice < _bufferVertices.Count; vertice++)
-            if (Vector3.Distance(_bufferVertices[vertice], vertex) < 0.01f)
-                return vertice;
+        for (int i = 0; i < _bufferVertices.Count; i++)
+            if (Vector3.Distance(_bufferVertices[i], vertex) < 0.01f)
+                return i;
         return -1;
     }
 
@@ -351,10 +355,10 @@ public class Decal : MonoBehaviour
     {
         Vector2 UvOffset = new Vector2(Random.Range(0, 2), Random.Range(0, 2));
 
-        for (int vertice = start; vertice < _bufferVertices.Count; vertice++)
+        for (int i = start; i < _bufferVertices.Count; i++)
         {
-            OffsetVertice(vertice);
-            MapUV(vertice, UvOffset, UVDivision);
+            OffsetVertice(i);
+            MapUV(i, UvOffset, UVDivision);
         }
     }
     private void OffsetVertice(int verticeIndex)

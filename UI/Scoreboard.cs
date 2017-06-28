@@ -60,7 +60,7 @@ public class Scoreboard : MonoBehaviour
         for (int i = 0; i < teams.Length; i++)
         {
             // Find the profiles of the team
-            List<GameManager.GameAspects.Profile> profiles = GameManager.Instance.GetTeamsProfiles(teams[i]);
+            List<GameManager.GameAspects.Profile> profiles = GameManager.Instance.GetTeamProfiles(teams[i]);
             // If there are no profiles for the team abort
             if (profiles.Count == 0)
                 continue;
@@ -120,7 +120,7 @@ public class Scoreboard : MonoBehaviour
                     if (teamStat.Team == GameManager.Instance.Game.Teams[teams[i]])
                     {
 
-                        List<GameManager.GameAspects.Profile> profiles = GameManager.Instance.GetTeamsProfiles(teams[i]);
+                        List<GameManager.GameAspects.Profile> profiles = GameManager.Instance.GetTeamProfiles(teams[i]);
                         // If there are no profiles for the team abort
                         if (profiles.Count == 0)
                             continue;

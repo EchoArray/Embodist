@@ -60,17 +60,17 @@ public static class ObjectReferencer
         string location = string.Empty;
 
         System.Object currentObject = rootObject;
-        for (int directory = 0; directory < pathDirectories.Length - 1; directory++)
+        for (int i = 0; i < pathDirectories.Length - 1; i++)
         {
             // Obtain parent
-            if (directory == 0)
-                location += pathDirectories[directory];
+            if (i == 0)
+                location += pathDirectories[i];
             else
-                location += "/" + pathDirectories[directory];
+                location += "/" + pathDirectories[i];
 
             storedKey = rootObject.ToString() + location;
 
-            currentObject = FindGetValue(currentObject, pathDirectories[directory], storedKey);
+            currentObject = FindGetValue(currentObject, pathDirectories[i], storedKey);
 
             // If we couldn't obtain it, abort
             if (currentObject == null)
@@ -154,17 +154,17 @@ public static class ObjectReferencer
         string location = string.Empty;
 
         System.Object currentObject = rootObject;
-        for (int directory = 0; directory < pathDirectories.Length - 1; directory++)
+        for (int i = 0; i < pathDirectories.Length - 1; i++)
         {
             // Obtain parent
-            if (directory == 0)
-                location += pathDirectories[directory];
+            if (i == 0)
+                location += pathDirectories[i];
             else
-                location += "/" + pathDirectories[directory];
+                location += "/" + pathDirectories[i];
 
             storedKey = rootObject.ToString() + location;
 
-            currentObject = FindGetValue(currentObject, pathDirectories[directory], storedKey);
+            currentObject = FindGetValue(currentObject, pathDirectories[i], storedKey);
 
             // If we couldn't obtain it, abort
             if (currentObject == null)
@@ -251,11 +251,11 @@ public static class ObjectReferencer
         string storedInfoKey = string.Empty;
         string name = string.Empty;
         string[] pathDirectories = path.Split('/');
-        for (int directory = 0; directory < pathDirectories.Length - 1; directory++)
+        for (int i = 0; i < pathDirectories.Length - 1; i++)
         {
-            name = pathDirectories[directory];
+            name = pathDirectories[i];
             storedInfoKey = rootObject.ToString() + " - " + path + name;
-            currentObject = FindGetValue(currentObject, pathDirectories[directory], storedInfoKey);
+            currentObject = FindGetValue(currentObject, pathDirectories[i], storedInfoKey);
         }
 
         name = pathDirectories[pathDirectories.Length - 1];

@@ -31,6 +31,11 @@ public class PhysicalEffect : MonoBehaviour
     [Space(15)]
     public bool DirectlyAffectCastor;
 
+    public bool OnlyApplyCameraEffectOnDamage;
+    /// <summary>
+    /// Defines the camera effect applied to any intersecting inanimate objects camera effector.
+    /// </summary>
+    public CameraEffect CameraEffect;
 
     /// <summary>
     /// Defines the duration in-which the effect is allowed to live.
@@ -171,7 +176,7 @@ public class PhysicalEffect : MonoBehaviour
     private void Update()
     {
         if(LifeSpan > 0)
-            Ommit();
+            Omit();
     }
     #endregion
 
@@ -193,17 +198,22 @@ public class PhysicalEffect : MonoBehaviour
         Development.AddTimedSphereGizmo(Color.red, Radius, this.transform.position, 3);
 
         GamerId = gamerId;
-        Ommit();
+        Omit();
     }
 
-    private void Ommit()
+    private void Omit()
     {
         if (DirectlyAffectCastor)
         {
             if (GamerId != 0)
             {
-                InanimateObject casterInanimateObject = GameManager.Instance.GetInanimateByGamerId(GamerId);
-                Affect(casterInanimateObject.gameObject, this.transform, false);
+                LocalPlayer localPlayer = GameManager.Instance.GetProfileByGamerId(GamerId).LocalPlayer;
+                if (localPlayer != null)
+                {
+                    InanimateObject casterInanimateObject = localPlayer.InanimateObject;
+                    Affect(casterInanimateObject.gameObject, this.transform, false);
+                }
+                
             }
         }
         else
@@ -245,11 +255,17 @@ public class PhysicalEffect : MonoBehaviour
             ApplyVibration(affectie, distance, Radius, Vibration);
             ApplyScreenShake(affectie, distance, Radius, ScreenShake);
 
+            if(!OnlyApplyCameraEffectOnDamage && CameraEffect != null)
+                CameraEffect.Apply(affectie);
+
             bool hasCaster = caster != null;
             if (!hasCaster || hasCaster && DirectlyAffectCastor || (!GameManager.Instance.Game.GameType.TeamGame || (GameManager.Instance.Game.GameType.TeamGame && caster.TeamId != affectie.TeamId)) && caster != affectie)
             {
                 Vector3 position = hasCaster ? caster.transform.position : effectTransform.position;
-                ApplyDamage(GamerId, affectie, position, distance, Radius, Damage, showDirection);
+                ApplyDamage(affectie, distance, Radius, Damage,GamerId, position, showDirection);
+
+                if(OnlyApplyCameraEffectOnDamage && CameraEffect != null)
+                    CameraEffect.Apply(affectie);
             }
         }
     }
@@ -281,6 +297,34 @@ public class PhysicalEffect : MonoBehaviour
         float intensity = screenShakeSettings.Intensity * scale;
 
         inanimateObject.LocalPlayer.CameraController.AddShake(duration, intensity, screenShakeSettings.IntensityOverLifetime);
+    }
+    public static void ApplyDamage(InanimateObject inanimateObject, float distance, float radius, DamageSettings damageSettings, int casterId, Vector3 position, bool showDirection)
+    {
+        // Applies damage to an inanimate object.
+
+        if (damageSettings.Damage <= 0)
+            return;
+
+
+        // If the object is an inanimate object, scale damage based on distance and apply
+        float scale = FalloffScale(distance, radius, damageSettings.DistanceFalloff);
+        // Scale damage
+        float damage = damageSettings.Damage * scale;
+
+        if (damage != 0)
+        {
+            // Define profiles
+            GameManager.GameAspects.Profile casterProfile = GameManager.Instance.GetProfileByGamerId(casterId);
+            GameManager.GameAspects.Profile affectieProfile = GameManager.Instance.GetProfileByGamerId(inanimateObject.GamerId);
+            
+            if (casterProfile != null && affectieProfile != null && casterProfile!= affectieProfile && casterProfile.LocalPlayer != null)
+                casterProfile.LocalPlayer.AttachedDamagedEnemy();
+
+            if (!affectieProfile.Local)
+                NetworkSessionNode.Instance.CmdTransferDamage(casterId, affectieProfile.GamerId, damage);
+            else if (casterProfile == null || casterProfile.Local)
+                inanimateObject.Damage(damage, position, casterId, showDirection);
+        }
     }
     public static void ApplyForce(GameObject gameObject, Transform effectTransform, float distance, float radius, ForceSettings forceSettings)
     {
@@ -346,35 +390,7 @@ public class PhysicalEffect : MonoBehaviour
 
 
         rigidBody.AddForce(force * forceDirection, forceSettings.ForceMode);
-        
-    }
-    public static void ApplyDamage(int casterId, InanimateObject inanimateObject, Vector3 position, float distance, float radius, DamageSettings damageSettings, bool showDirection)
-    {
-        // Applies damage to an inanimate object.
 
-        if (damageSettings.Damage <= 0)
-            return;
-
-
-        // If the object is an inanimate object, scale damage based on distance and apply
-        float scale = FalloffScale(distance, radius, damageSettings.DistanceFalloff);
-        // Scale damage
-        float damage = damageSettings.Damage * scale;
-
-        if (damage != 0)
-        {
-            // Define profiles
-            GameManager.GameAspects.Profile casterProfile = GameManager.Instance.GetProfileByGamerId(casterId);
-            GameManager.GameAspects.Profile affectieProfile = GameManager.Instance.GetProfileByGamerId(inanimateObject.GamerId);
-            
-            if (casterProfile != null && affectieProfile != null && casterProfile!= affectieProfile && casterProfile.LocalPlayer != null)
-                casterProfile.LocalPlayer.AttachedDamagedEnemy();
-
-            if (!affectieProfile.Local)
-                NetworkSessionNode.Instance.CmdTransferDamage(casterId, affectieProfile.GamerId, damage);
-            else if (casterProfile.Local)
-                inanimateObject.Damage(damage, position, casterId, showDirection);
-        }
     }
 
     public static float FalloffScale(float distance, float radius, AnimationCurve falloff)

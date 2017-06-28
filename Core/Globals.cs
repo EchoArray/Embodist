@@ -20,12 +20,14 @@ public class Globals : MonoBehaviour
     /// </summary>
     public const int SCENERY_LAYER = 13;
 
-
     /// <summary>
     /// Determines the layers that are used to retrieve lightmap color data.
     /// </summary>
     public LayerMask LightmapColorLayers;
 
+    /// <summary>
+    /// Defines the base camera effect applied to each camera effector in the scene.
+    /// </summary>
     public CameraEffect CameraEffect;
 
     /// <summary>
@@ -62,7 +64,7 @@ public class Globals : MonoBehaviour
         /// <summary>
         /// Defines the grounding and jumping angle bias for an inanimate object.
         /// </summary>
-        public float AngleBias = 43f;
+        public float GroundAngleBias = 46f;
 
         /// <summary>
         /// Defines the duration in which a jump will be trigger upon an airborne jump attempt and landing.
@@ -137,11 +139,6 @@ public class Globals : MonoBehaviour
             public class GlobalLungeValues
             {
                 /// <summary>
-                /// Defines the minimum distance in-which the camera will correct its rotation upon lunging.
-                /// </summary>
-                public float MinCameraCorrectionLungeDistance;
-
-                /// <summary>
                 /// Defines the physical effect applied to a lunging inanimate object up-on impact.
                 /// </summary>
                 public PhysicalEffect SelfImpactPhysicalEffect;
@@ -154,21 +151,25 @@ public class Globals : MonoBehaviour
                 /// </summary>
                 public float Velocity;
                 /// <summary>
-                /// Defines the camera offset correction rate while a light class inanimate object is lunging.
+                /// Defines the velocity loss of a light class inanimate object upon impact.
                 /// </summary>
-                public float FollowOffsetCorrectionRate;
-                /// <summary>
-                /// Defines the look sensitivity of a lunging light class inanimate object.
-                /// </summary>
-                public float CameraOrbitSensitivity;
+                public float ImpactVelocityLossFraction;
                 /// <summary>
                 /// Defines the duration in which a light class inanimate object must wait for its next lunge.
                 /// </summary>
                 public float NextLungeDelay;
                 /// <summary>
-                /// Defines the velocity loss of a light class inanimate object upon impact.
+                /// Defines the minimum distance in-which the camera will correct its rotation upon lunging.
                 /// </summary>
-                public float ImpactVelocityLossFraction;
+                public float CameraCorrectionThreshold;
+                /// Defines the camera offset correction rate while a light class inanimate object is lunging.
+                /// </summary>
+                public float FollowOffsetCorrectionRate;
+                /// <summary>
+                /// <summary>
+                /// Defines the look sensitivity of a lunging light class inanimate object.
+                /// </summary>
+                public float CameraOrbitSensitivity;
             }
             public GlobalLungeValues Lunge;
 
@@ -191,17 +192,22 @@ public class Globals : MonoBehaviour
         public class HeavyClassValues : ClassValues
         {
             /// <summary>
-            /// Defines the physical effect applied to the inanimate object that the heavy inanimate object has collided with.
+            /// Defines the physical effect applied to the opponent that the heavy inanimate object has collided with.
             /// </summary>
             [Space(10)]
             public PhysicalEffect CollidePhysicalEffect;
-            public PhysicalEffect CollideSelfPhysicalEffect;
-
-            public float DamageApplicationVelocityMagnitude = 3.243f;
             /// <summary>
-            /// Defines the minimum velocity that identifies as the heavy inanimate object as being stuck.
+            /// Defines the physical effect applied to the heavy inanimate object upon colliding with an opponent.
             /// </summary>
-            public float StuckVelocityMin;
+            public PhysicalEffect CollideSelfPhysicalEffect;
+            /// <summary>
+            /// Defines the minimum velocity of the inanimate object in-which damage wont be applied upon collision.
+            /// </summary>
+            public float DamageApplicationVelocityMagnitudeThreshold = 3.243f;
+            /// <summary>
+            /// Defines the minimum velocity that identifies the heavy inanimate object as being stuck.
+            /// </summary>
+            public float StuckVelocityCeiling;
             /// <summary>
             /// Defines the increase in velocity applied when the heavy inanimate object is stuck.
             /// </summary>
@@ -218,6 +224,18 @@ public class Globals : MonoBehaviour
         /// Determines the layers ignored by a projectile.
         /// </summary>
         public LayerMask ProjectileIgnoredLayers;
+        /// <summary>
+        /// Defines the minimun scale in-which projectile aiming is activated.
+        /// </summary>
+        public float ProjectileTargetingAimScaleThreshold;
+        /// <summary>
+        /// Defines the level of heat in-which a weapon will become overheated.
+        /// </summary>
+        public float OverheatLevel = 100;
+        /// <summary>
+        /// Defines the level of heat in-which a weapon will become cooled after being overheated.
+        /// </summary>
+        public float CooledHeatLevel = 50;
     }
     public WeaponValues WeaponDefaults;
 

@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Generic;
 
-[ExecuteInEditMode]
 public class CameraEffector : MonoBehaviour
 {
     #region Values
@@ -60,8 +59,8 @@ public class CameraEffector : MonoBehaviour
 
     private void SetDefaults()
     {
-        SetBaseEffect(Globals.Instance.CameraEffect.Effect.Colors);
         _material = new Material(Shader);
+        SetBaseEffect(Globals.Instance.CameraEffect.Effect.Colors);
     }
 
     private void UpdateEffects()
@@ -132,10 +131,22 @@ public class CameraEffector : MonoBehaviour
 
     public void AddEffect(CameraEffect cameraEffect)
     {
-        AddEffect(cameraEffect.Effect);
+        if(cameraEffect != null)
+            AddEffect(cameraEffect.Effect);
     }
     public void AddEffect(CameraEffect.EffectSettings effectSettings)
     {
+        // Try to find an existing effect, and update its times
+        foreach (CameraEffect.EffectSettings effect in _effects)
+        {
+            if (effect.UniqueID == effectSettings.UniqueID)
+            {
+                effect.Properties.StartTime = Time.time;
+                effect.Properties.KillTime = Time.time + effect.Properties.Duration;
+                return;
+            }
+        }
+
         // Create new instance of effect settings
         CameraEffect.EffectSettings newEffectSettings = new CameraEffect.EffectSettings(effectSettings);
         // Define start and kill times

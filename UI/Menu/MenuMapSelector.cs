@@ -20,6 +20,7 @@ public class MenuMapSelector : MenuControl
         public string Name;
         public string SceneName;
         public Texture2D PreviewImage;
+        public bool Disabled;
     }
     public Option[] Options;
 
@@ -54,19 +55,51 @@ public class MenuMapSelector : MenuControl
     }
     public void Change(bool forward)
     {
-        // Increase active index positon
-        ActiveOption += forward ? 1 : -1;
+        if (forward)
+            ActiveOption = ActiveOption == Options.Length - 1 ? 0 : ActiveOption + 1;
+        else
+            ActiveOption = ActiveOption == 0 ? Options.Length - 1 : ActiveOption - 1;
+        
+        if (forward)
+        {
+            for (int i = ActiveOption; i < Options.Length; i++)
+            {
+                if (!Options[i].Disabled)
+                {
+                    ActiveOption = i;
+                    break;
+                }
 
-        if (ActiveOption > Options.Length - 1)
-            ActiveOption = 0;
-        else if (ActiveOption < 0)
-            ActiveOption = Options.Length - 1;
+                if (i == Options.Length - 1)
+                    i = 0;
+            }
+        }
+        else
+        {
+            for (int i = ActiveOption; i >= 0; i--)
+            {
+                if (!Options[i].Disabled)
+                {
+                    ActiveOption = i;
+                    break;
+                }
+
+                if (i == 0)
+                    i = Options.Length;
+            }
+        }
 
         SelectMap(ActiveOption);
     }
 
     public void SelectMap(int index)
     {
+        if (Options[index].Disabled)
+        {
+            Change(true);
+            return;
+        }
+
         MapNameLabel.text = Options[index].Name.ToUpper();
 
         GameManager.Instance.Game.SelectedMapName = Options[index].SceneName;
